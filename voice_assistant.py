@@ -8,13 +8,24 @@ Run directly:   python voice_assistant.py
 Run as service: systemctl start voice_assistant
 Compile:        make build
 
-Required env vars:
+Configuration:
+  Copy .env.example → .env and fill in your values.
+  All settings can also be set as regular environment variables (env vars
+  override .env values).
+
+Required:
   PORCUPINE_ACCESS_KEY  — from https://console.picovoice.ai/
   WAKE_WORD_MODEL_PATH  — path to .ppn file; omit to use built-in "porcupine" keyword
 """
 
 import logging
 import sys
+
+from dotenv import load_dotenv
+
+# Load .env before any config is imported so os.getenv() picks up the values.
+# If .env does not exist this is a no-op.
+load_dotenv()
 
 from src import config
 from src.daemon import VoiceAssistantDaemon

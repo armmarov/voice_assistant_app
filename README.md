@@ -163,11 +163,20 @@ make deploy ROBOT_USER=ubuntu ROBOT_HOST=192.168.0.63 ROBOT_DIR=/opt/myrobot
 
 Register for free at [https://console.picovoice.ai/](https://console.picovoice.ai/) and copy your **AccessKey**.
 
-### 2. Set environment variables
+### 2. Create your `.env` file
 
 ```bash
-export PORCUPINE_ACCESS_KEY=<your-access-key>
+cp .env.example .env
 ```
+
+Open `.env` and fill in at minimum:
+
+```ini
+PORCUPINE_ACCESS_KEY=<your-access-key>
+```
+
+All other variables have sensible defaults — override only what you need.
+`.env` is git-ignored and never committed.
 
 ### 3. Run from source
 
@@ -347,32 +356,48 @@ All settings can be overridden via environment variables.
 ## Running as a systemd Service
 
 The service runs the compiled binary at `/opt/voice_assistant/voice_assistant`.
+All configuration is read from `/opt/voice_assistant/.env` on the robot.
 
 ### Automated (via Makefile)
 
 ```bash
+# 1. Fill in your .env locally first
+cp .env.example .env
+editor .env   # set PORCUPINE_ACCESS_KEY, MIC_DEVICE_INDEX, etc.
+
+# 2. Build, copy binary + .env to robot, install service
 make deploy ROBOT_HOST=192.168.0.63
 make install ROBOT_HOST=192.168.0.63
+
+# 3. Tail logs
 make service-logs ROBOT_HOST=192.168.0.63
 ```
+
+`make deploy` automatically copies `.env` to `/opt/voice_assistant/.env` on the robot
+and sets permissions to `600` (owner-read-only).
 
 ### Manual (on the robot)
 
 ```bash
-sudo cp voice_assistant.service /etc/systemd/system/
+# Copy and edit config
+cp /opt/voice_assistant/.env.example /opt/voice_assistant/.env
+nano /opt/voice_assistant/.env   # set your keys
+
+# Install service
+sudo cp /opt/voice_assistant/voice_assistant.service /etc/systemd/system/
 sudo systemctl daemon-reload
 sudo systemctl enable voice_assistant
 sudo systemctl start voice_assistant
 journalctl -u voice_assistant -f
 ```
 
-Edit env vars in the service file before installing:
+### Updating config without redeploying the binary
 
-```ini
-Environment="PORCUPINE_ACCESS_KEY=<your-key>"
-Environment="WAKE_WORD_MODEL_PATH=/opt/voice_assistant/hey-robot_en_linux_v3_0_0.ppn"
-Environment="MIC_DEVICE_INDEX=0"
-Environment="SPK_DEVICE_INDEX=1"
+Just edit `.env` on the robot and restart the service:
+
+```bash
+ssh ubuntu@<robot> "nano /opt/voice_assistant/.env"
+ssh ubuntu@<robot> "sudo systemctl restart voice_assistant"
 ```
 
 ---

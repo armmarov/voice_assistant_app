@@ -46,6 +46,7 @@ build: setup-dev
 		--onefile \
 		--follow-imports \
 		--include-package=src \
+		--include-package=dotenv \
 		--include-package-data=pvporcupine \
 		--output-dir=$(DIST_DIR) \
 		--output-filename=$(BINARY) \
@@ -64,11 +65,19 @@ deploy: build
 	@echo ">>> Deploying to $(ROBOT_USER)@$(ROBOT_HOST):$(ROBOT_DIR) …"
 	ssh $(ROBOT_USER)@$(ROBOT_HOST) "mkdir -p $(ROBOT_DIR)"
 	scp $(DIST_DIR)/$(BINARY) $(ROBOT_USER)@$(ROBOT_HOST):$(ROBOT_DIR)/$(BINARY)
+	scp $(SERVICE_SRC) $(ROBOT_USER)@$(ROBOT_HOST):$(ROBOT_DIR)/$(SERVICE_SRC)
 	@if ls *.ppn 2>/dev/null | grep -q .; then \
 		echo ">>> Copying .ppn wake word model(s) …"; \
 		scp *.ppn $(ROBOT_USER)@$(ROBOT_HOST):$(ROBOT_DIR)/; \
 	fi
-	scp $(SERVICE_SRC) $(ROBOT_USER)@$(ROBOT_HOST):$(ROBOT_DIR)/$(SERVICE_SRC)
+	@if [ -f .env ]; then \
+		echo ">>> Copying .env …"; \
+		scp .env $(ROBOT_USER)@$(ROBOT_HOST):$(ROBOT_DIR)/.env; \
+		ssh $(ROBOT_USER)@$(ROBOT_HOST) "chmod 600 $(ROBOT_DIR)/.env"; \
+	else \
+		echo ">>> WARNING: .env not found locally — copy .env.example to .env and fill in your keys first."; \
+		echo ">>>   cp .env.example .env && editor .env"; \
+	fi
 	@echo ">>> Deploy complete. Run 'make install' to install the service."
 
 # ─── Install service on robot ─────────────────────────────────────────────────
