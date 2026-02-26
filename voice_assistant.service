@@ -1,0 +1,56 @@
+[Unit]
+Description=Voice Assistant Daemon (Mic → ASR → LLM → TTS → Speaker)
+After=network.target sound.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=armmarov
+Group=armmarov
+
+WorkingDirectory=/opt/voice_assistant
+ExecStart=/opt/voice_assistant/voice_assistant
+
+Restart=on-failure
+RestartSec=5
+
+# ── Environment overrides ──────────────────────────────────────────────────
+# Uncomment and adjust as needed.
+#
+# LLM endpoint  (local Ollama, vLLM, or cloud OpenAI-compatible URL)
+#Environment="LLM_BASE_URL=http://localhost:11434/v1"
+#Environment="LLM_API_KEY=nokey"
+#Environment="LLM_MODEL=llama3"
+#
+# ASR / TTS (defaults to 3.114.138.123 as in the API docs)
+#Environment="ASR_BASE_URL=http://3.114.138.123:8005"
+#Environment="TTS_BASE_URL=http://3.114.138.123:8006"
+#Environment="TTS_VOICE=default"
+#
+# Wake word (Picovoice Porcupine)
+# Get your free AccessKey at https://console.picovoice.ai/
+#Environment="PORCUPINE_ACCESS_KEY=<your-access-key>"
+# Path to custom .ppn wake word file (e.g. hey-robot_en_linux_v3_0_0.ppn)
+# Leave unset to use the built-in "porcupine" keyword for testing.
+#Environment="WAKE_WORD_MODEL_PATH="
+#Environment="WAKE_WORD_SENSITIVITY=0.5"
+#Environment="WAKE_LISTEN_TIMEOUT_MS=10000"
+#
+# VAD tuning
+#Environment="VAD_AGGRESSIVENESS=3"
+#Environment="VAD_SILENCE_MS=1200"
+#Environment="VAD_MIN_SPEECH_MS=500"
+#
+# Logging
+Environment="LOG_FILE=/var/log/voice_assistant.log"
+Environment="LOG_LEVEL=INFO"
+
+# Allow access to audio devices
+SupplementaryGroups=audio
+
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=voice_assistant
+
+[Install]
+WantedBy=multi-user.target
