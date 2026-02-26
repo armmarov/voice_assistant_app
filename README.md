@@ -96,10 +96,10 @@ pa.terminate()
 "
 ```
 
-Set the indices in `voice_assistant.service`:
+Set the indices in your `.env` file:
 ```ini
-Environment="MIC_DEVICE_INDEX=0"   # card with maxInputChannels > 0
-Environment="SPK_DEVICE_INDEX=1"   # card with maxOutputChannels > 0
+MIC_DEVICE_INDEX=0   # card with maxInputChannels > 0
+SPK_DEVICE_INDEX=1   # card with maxOutputChannels > 0
 ```
 
 ### 6. Test mic and speaker
@@ -196,9 +196,14 @@ The assistant uses [Picovoice Porcupine](https://picovoice.ai/platform/porcupine
 
 If `WAKE_WORD_MODEL_PATH` is not set, the assistant falls back to the built-in **"porcupine"** keyword.
 
+Set in `.env`:
+```ini
+PORCUPINE_ACCESS_KEY=<your-key>
+# WAKE_WORD_MODEL_PATH left empty → say "porcupine" to activate
+```
+
+Then run:
 ```bash
-export PORCUPINE_ACCESS_KEY=<your-key>
-# no WAKE_WORD_MODEL_PATH → say "porcupine" to activate
 make run
 ```
 
@@ -208,11 +213,11 @@ make run
 2. Go to **Wake Word** → create a new model → type `Hey Robot`
 3. Select platform: **Linux** → download the `.ppn` file (e.g. `hey-robot_en_linux_v3_0_0.ppn`)
 4. Place the `.ppn` file in the project root (it will be copied to the robot automatically by `make deploy`)
-5. Set env vars in `voice_assistant.service` before deploying:
+5. Set the values in your `.env` file:
 
 ```ini
-Environment="PORCUPINE_ACCESS_KEY=<your-key>"
-Environment="WAKE_WORD_MODEL_PATH=/opt/voice_assistant/hey-robot_en_linux_v3_0_0.ppn"
+PORCUPINE_ACCESS_KEY=<your-key>
+WAKE_WORD_MODEL_PATH=/opt/voice_assistant/hey-robot_en_linux_v3_0_0.ppn
 ```
 
 Then deploy:
@@ -230,8 +235,9 @@ Both strategies are independent and can run simultaneously for maximum robustnes
 
 ### Strategy 1: Mic Mute (default: enabled)
 
+Set in `.env` (enabled by default, no change needed unless disabling):
 ```ini
-Environment="MIC_MUTE_DURING_PLAYBACK=true"
+MIC_MUTE_DURING_PLAYBACK=true
 ```
 
 - Mic is muted in software during TTS playback
@@ -283,10 +289,11 @@ pactl list short sinks   | grep aec
 
 ### Recommended combination (best of both)
 
+`.env`:
 ```ini
-Environment="MIC_MUTE_DURING_PLAYBACK=true"
-# + PulseAudio AEC configured at OS level → auto-detected by app
+MIC_MUTE_DURING_PLAYBACK=true
 ```
+Plus PulseAudio AEC configured at OS level — auto-detected by the app at startup.
 
 | Strategy | Setup | Barge-in | Best for |
 |---|---|---|---|
@@ -323,7 +330,8 @@ IDLE ──── wake word ────► LISTENING ──── utterance ─
 
 ## Configuration
 
-All settings can be overridden via environment variables.
+All settings live in `.env` (copy from `.env.example`). Every variable can also
+be set as a regular environment variable — env vars always override `.env` values.
 
 | Variable | Default | Description |
 |---|---|---|
@@ -410,6 +418,8 @@ config.py                   # Redirect shim → src/config.py
 requirements.txt            # Python dependencies
 Makefile                    # Build, deploy, and service management
 voice_assistant.service     # systemd unit file (runs compiled binary)
+.env.example                # Configuration template — copy to .env and fill in values
+.env                        # Your local config (git-ignored, never committed)
 API_DOCUMENTATION_EN.md     # ASR / TTS API reference
 src/
 ├── config.py               # All configuration with env var overrides
