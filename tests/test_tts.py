@@ -9,11 +9,14 @@ Usage:
     python tests/test_tts.py --text "Hello robot"    # custom text
     python tests/test_tts.py --voice liudao          # specific voice
     python tests/test_tts.py --play                  # play audio after synthesis (requires pyaudio)
+    python tests/test_tts.py --play --device 1       # play on specific speaker device index
     python tests/test_tts.py --save output.wav       # save audio to file
+    python tests/test_tts.py --list-devices          # list available speaker devices
 
 Config (via .env or environment variables):
-    TTS_BASE_URL   default: http://voice-api.zetrix.com:8006
-    TTS_VOICE      default: default
+    TTS_BASE_URL     default: http://voice-api.zetrix.com:8006
+    TTS_VOICE        default: default
+    SPK_DEVICE_INDEX default: -1 (system default)
 """
 
 import argparse
@@ -31,9 +34,10 @@ import requests
 
 # ─── Config ───────────────────────────────────────────────────────────────────
 
-TTS_BASE_URL = os.getenv("TTS_BASE_URL", "http://voice-api.zetrix.com:8006")
-TTS_VOICE    = os.getenv("TTS_VOICE",    "default")
-TTS_TIMEOUT  = int(os.getenv("TTS_TIMEOUT", "60"))
+TTS_BASE_URL     = os.getenv("TTS_BASE_URL",     "http://voice-api.zetrix.com:8006")
+TTS_VOICE        = os.getenv("TTS_VOICE",        "default")
+TTS_TIMEOUT      = int(os.getenv("TTS_TIMEOUT",  "60"))
+SPK_DEVICE_INDEX = int(os.getenv("SPK_DEVICE_INDEX", "-1"))
 
 DEFAULT_TEXT = "Hello, I am your voice assistant. This is a test of the text to speech service."
 
@@ -62,19 +66,43 @@ def wav_duration(wav_bytes: bytes) -> float:
         return 0.0
 
 
-def play_wav(wav_bytes: bytes) -> None:
-    """Play WAV bytes through the default speaker."""
+def list_devices() -> None:
+    try:
+        import pyaudio
+        pa = pyaudio.PyAudio()
+        print(f"\n{BOLD}Available audio output devices:{RESET}")
+        found = False
+        for i in range(pa.get_device_count()):
+            d = pa.get_device_info_by_index(i)
+            if d["maxOutputChannels"] > 0:
+                marker = f" {GREEN}← default{RESET}" if i == pa.get_default_output_device_info()["index"] else ""
+                print(f"  [{i}] {d['name']}  (channels={d['maxOutputChannels']}){marker}")
+                found = True
+        if not found:
+            print("  No output devices found.")
+        pa.terminate()
+    except ImportError:
+        print("pyaudio not installed.")
+    except Exception as e:
+        print(f"Error listing devices: {e}")
+
+
+def play_wav(wav_bytes: bytes, device_index: int = -1) -> None:
+    """Play WAV bytes through the specified speaker device."""
     try:
         import pyaudio
         import wave
         pa = pyaudio.PyAudio()
         with wave.open(BytesIO(wav_bytes)) as wf:
-            stream = pa.open(
+            open_kwargs = dict(
                 format=pa.get_format_from_width(wf.getsampwidth()),
                 channels=wf.getnchannels(),
                 rate=wf.getframerate(),
                 output=True,
             )
+            if device_index >= 0:
+                open_kwargs["output_device_index"] = device_index
+            stream = pa.open(**open_kwargs)
             data = wf.readframes(1024)
             while data:
                 stream.write(data)
@@ -138,7 +166,7 @@ def test_list_voices() -> bool:
     return False
 
 
-def test_synthesize(text: str, voice: str, save_path: str = None, play: bool = False) -> bool:
+def test_synthesize(text: str, voice: str, save_path: str = None, play: bool = False, device_index: int = -1) -> bool:
     header(f"3. Speech Synthesis  POST /generate")
     url = f"{TTS_BASE_URL}/generate"
     info(f"URL  : {url}")
@@ -171,8 +199,8 @@ def test_synthesize(text: str, voice: str, save_path: str = None, play: bool = F
             ok(f"Saved to: {save_path}")
 
         if play:
-            info("Playing audio …")
-            play_wav(wav_bytes)
+            info(f"Playing audio … (device={'default' if device_index < 0 else device_index})")
+            play_wav(wav_bytes, device_index)
 
         return True
     except requests.ConnectionError:
@@ -190,20 +218,27 @@ def test_synthesize(text: str, voice: str, save_path: str = None, play: bool = F
 
 def main():
     parser = argparse.ArgumentParser(description="TTS service test")
-    parser.add_argument("--text",  default=DEFAULT_TEXT, help="Text to synthesize")
-    parser.add_argument("--voice", default=TTS_VOICE,    help="Voice name (default/liudao/filrty/zhiyu)")
-    parser.add_argument("--save",  metavar="FILE",        help="Save output WAV to this file")
-    parser.add_argument("--play",  action="store_true",   help="Play audio after synthesis")
+    parser.add_argument("--text",         default=DEFAULT_TEXT,    help="Text to synthesize")
+    parser.add_argument("--voice",        default=TTS_VOICE,       help="Voice name (default/liudao/filrty/zhiyu)")
+    parser.add_argument("--save",         metavar="FILE",           help="Save output WAV to this file")
+    parser.add_argument("--play",         action="store_true",      help="Play audio after synthesis")
+    parser.add_argument("--device",       type=int, default=SPK_DEVICE_INDEX, help="Speaker device index (-1 = system default)")
+    parser.add_argument("--list-devices", action="store_true",      help="List available speaker devices and exit")
     args = parser.parse_args()
+
+    if args.list_devices:
+        list_devices()
+        sys.exit(0)
 
     print(f"\n{BOLD}=== TTS Service Test ==={RESET}")
     print(f"Base URL : {TTS_BASE_URL}")
     print(f"Voice    : {args.voice}")
+    print(f"Device   : {'system default' if args.device < 0 else args.device}")
 
     results = []
     results.append(test_health())
     results.append(test_list_voices())
-    results.append(test_synthesize(args.text, args.voice, save_path=args.save, play=args.play))
+    results.append(test_synthesize(args.text, args.voice, save_path=args.save, play=args.play, device_index=args.device))
 
     # ─── Summary ──────────────────────────────────────────────────────────────
     passed = sum(results)
