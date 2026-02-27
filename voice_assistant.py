@@ -20,12 +20,15 @@ Required:
 
 import logging
 import sys
+from pathlib import Path
 
 from dotenv import load_dotenv
 
-# Load .env before any config is imported so os.getenv() picks up the values.
+# Load .env from the current working directory (where the binary / script is run from).
+# Using Path.cwd() ensures the compiled binary finds .env relative to where it was
+# launched, not relative to the Nuitka temp extraction directory.
 # If .env does not exist this is a no-op.
-load_dotenv()
+load_dotenv(dotenv_path=Path.cwd() / ".env")
 
 from src import config
 from src.daemon import VoiceAssistantDaemon
