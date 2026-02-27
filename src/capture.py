@@ -57,12 +57,20 @@ class MicrophoneCapture:
     # ── setup ────────────────────────────────────────────────────────────────
 
     def _init_oww(self):
+        import openwakeword
         from openwakeword.model import Model
 
         if config.WAKE_WORD_MODEL_PATH:
             oww = Model(wakeword_models=[config.WAKE_WORD_MODEL_PATH])
             log.info("Wake word engine loaded from %s", config.WAKE_WORD_MODEL_PATH)
         else:
+            # Download built-in models if not already present.
+            model_file = config.WAKE_WORD_MODEL + "_v0.1.tflite"
+            models_dir = __import__("pathlib").Path(openwakeword.__file__).parent / "resources" / "models"
+            if not (models_dir / model_file).exists():
+                log.info("Downloading OpenWakeWord models (first run) …")
+                openwakeword.utils.download_models([config.WAKE_WORD_MODEL + "_v0.1"])
+                log.info("Models downloaded.")
             oww = Model(wakeword_models=[config.WAKE_WORD_MODEL])
             log.info("Wake word engine loaded: built-in '%s'", config.WAKE_WORD_MODEL)
 
