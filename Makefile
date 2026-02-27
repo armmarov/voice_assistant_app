@@ -48,6 +48,7 @@ build: setup-dev
 		--include-package=src \
 		--include-package=dotenv \
 		--include-package-data=pvporcupine \
+		--include-data-dir=$(VENV)/lib/$(PYTHON)/site-packages/pvporcupine=pvporcupine \
 		--output-dir=$(DIST_DIR) \
 		--output-filename=$(BINARY) \
 		$(SRC)
