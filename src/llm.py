@@ -32,7 +32,7 @@ class LLMClient:
             "messages": messages,
             "stream": False,
         }
-        headers = {"Authorization": f"Bearer {config.LLM_API_KEY}"}
+        headers = {"Authorization": config.LLM_API_KEY}
         url = f"{config.LLM_BASE_URL}/chat/completions"
 
         try:

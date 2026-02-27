@@ -56,7 +56,7 @@ def header(msg): print(f"\n{BOLD}{msg}{RESET}")
 def chat(messages: list) -> dict:
     """Send messages and return the full response dict."""
     url = f"{LLM_BASE_URL}/chat/completions"
-    headers = {"Authorization": f"Bearer {LLM_API_KEY}"}
+    headers = {"Authorization": LLM_API_KEY}
     payload = {
         "model": LLM_MODEL,
         "messages": messages,
@@ -153,7 +153,7 @@ def test_models_endpoint() -> bool:
     header("3. Models List  GET /models")
     url = f"{LLM_BASE_URL}/models"
     info(f"URL: {url}")
-    headers = {"Authorization": f"Bearer {LLM_API_KEY}"}
+    headers = {"Authorization": LLM_API_KEY}
     try:
         t0 = time.time()
         resp = requests.get(url, headers=headers, timeout=10)
