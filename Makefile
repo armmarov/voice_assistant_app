@@ -47,8 +47,9 @@ build: setup-dev
 		--follow-imports \
 		--include-package=src \
 		--include-package=dotenv \
-		--include-package-data=pvporcupine \
-		--include-data-files=$(VENV)/lib/$(PYTHON)/site-packages/pvporcupine/lib/linux/x86_64/libpv_porcupine.so=pvporcupine/lib/linux/x86_64/libpv_porcupine.so \
+		--include-package=openwakeword \
+		--include-package=numpy \
+		--include-package-data=openwakeword \
 		--output-dir=$(DIST_DIR) \
 		--output-filename=$(BINARY) \
 		$(SRC)

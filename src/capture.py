@@ -1,11 +1,10 @@
 import logging
-import struct
 import threading
 from collections import deque
 from typing import Callable, List, Optional
 
+import numpy as np
 import pyaudio
-import pvporcupine
 import webrtcvad
 
 from . import config
@@ -21,7 +20,7 @@ class MicrophoneCapture:
     before VAD starts collecting the command utterance.
 
     State machine:
-      IDLE      — feeds audio to Porcupine for wake word detection; VAD inactive.
+      IDLE      — feeds audio to OpenWakeWord for wake word detection; VAD inactive.
       LISTENING — wake word heard; WebRTC VAD captures an utterance, emits it
                   via on_utterance callback, then returns to IDLE.
 
@@ -30,11 +29,9 @@ class MicrophoneCapture:
       still reads from the mic (keeps PyAudio buffer drained) but discards every
       frame and aborts any in-progress LISTENING session.
 
-    Frame-size reconciliation:
-      Porcupine: frame_length samples (512 @ 16 kHz) = 1024 bytes
-      WebRTC VAD: 480 samples (30 ms @ 16 kHz)       =  960 bytes
-      Solution: read 1024 bytes per iteration; feed all to Porcupine, feed first
-      960 bytes to VAD.
+    Frame size:
+      PyAudio / VAD: 480 samples (30 ms @ 16 kHz) = 960 bytes
+      OpenWakeWord:  accepts any chunk size; buffers internally.
     """
 
     _PADDING_CHUNKS    = 10   # ring-buffer pre-speech padding: 10 × 30 ms ≈ 300 ms
@@ -45,8 +42,7 @@ class MicrophoneCapture:
         self._on_utterance = on_utterance
         self._on_wake_word = on_wake_word
         self._vad = webrtcvad.Vad(config.VAD_AGGRESSIVENESS)
-        self._porcupine = self._init_porcupine()
-        self._porcupine_frame_samples = self._porcupine.frame_length
+        self._oww = self._init_oww()
 
         self._pa = pyaudio.PyAudio()
         self._stream: Optional[pyaudio.Stream] = None
@@ -60,30 +56,22 @@ class MicrophoneCapture:
 
     # ── setup ────────────────────────────────────────────────────────────────
 
-    def _init_porcupine(self) -> pvporcupine.Porcupine:
-        if not config.PORCUPINE_ACCESS_KEY:
-            raise RuntimeError(
-                "PORCUPINE_ACCESS_KEY is not set. "
-                "Register at https://console.picovoice.ai/ and set the env var."
-            )
+    def _init_oww(self):
+        from openwakeword.model import Model
+
         if config.WAKE_WORD_MODEL_PATH:
-            porcupine = pvporcupine.create(
-                access_key=config.PORCUPINE_ACCESS_KEY,
-                keyword_paths=[config.WAKE_WORD_MODEL_PATH],
-                sensitivities=[config.WAKE_WORD_SENSITIVITY],
-            )
+            oww = Model(wakeword_models=[config.WAKE_WORD_MODEL_PATH])
             log.info("Wake word engine loaded from %s", config.WAKE_WORD_MODEL_PATH)
         else:
-            porcupine = pvporcupine.create(
-                access_key=config.PORCUPINE_ACCESS_KEY,
-                keywords=["porcupine"],
-                sensitivities=[config.WAKE_WORD_SENSITIVITY],
-            )
-            log.warning(
-                "WAKE_WORD_MODEL_PATH not set — using built-in 'porcupine' keyword. "
-                "Say 'porcupine' to activate."
-            )
-        return porcupine
+            oww = Model(wakeword_models=[config.WAKE_WORD_MODEL])
+            log.info("Wake word engine loaded: built-in '%s'", config.WAKE_WORD_MODEL)
+
+        log.info(
+            "Wake word threshold: %.2f  (say '%s' to activate)",
+            config.WAKE_WORD_THRESHOLD,
+            config.WAKE_WORD_MODEL_PATH or config.WAKE_WORD_MODEL,
+        )
+        return oww
 
     # ── public mute controls ─────────────────────────────────────────────────
 
@@ -115,7 +103,7 @@ class MicrophoneCapture:
             channels=config.MIC_CHANNELS,
             rate=config.MIC_SAMPLE_RATE,
             input=True,
-            frames_per_buffer=self._porcupine_frame_samples,
+            frames_per_buffer=self._VAD_FRAME_SAMPLES,
         )
         if config.MIC_DEVICE_INDEX >= 0:
             open_kwargs["input_device_index"] = config.MIC_DEVICE_INDEX
@@ -135,7 +123,6 @@ class MicrophoneCapture:
             self._stream.stop_stream()
             self._stream.close()
         self._pa.terminate()
-        self._porcupine.delete()
         log.info("Microphone capture stopped.")
 
     # ── capture loop ─────────────────────────────────────────────────────────
@@ -153,7 +140,7 @@ class MicrophoneCapture:
         while self._running:
             try:
                 frame = self._stream.read(
-                    self._porcupine_frame_samples, exception_on_overflow=False
+                    self._VAD_FRAME_SAMPLES, exception_on_overflow=False
                 )
             except OSError as exc:
                 log.warning("Audio read error: %s", exc)
@@ -177,19 +164,19 @@ class MicrophoneCapture:
                 silence_count = 0
                 log.debug("Resumed LISTENING after ack.")
 
-            pcm_int16 = struct.unpack_from(f"{self._porcupine_frame_samples}h", frame)
-            vad_frame = frame[: self._VAD_FRAME_BYTES]
-
             if self._state == "IDLE":
-                ring.append(vad_frame)
-                if self._porcupine.process(pcm_int16) >= 0:
+                ring.append(frame)
+                pcm = np.frombuffer(frame, dtype=np.int16)
+                prediction = self._oww.predict(pcm)
+                if any(score >= config.WAKE_WORD_THRESHOLD for score in prediction.values()):
                     log.info("Wake word detected! Listening for command …")
+                    self._oww.reset()
                     if self._on_wake_word:
                         self._on_wake_word()
-                    voiced       = list(ring)
+                    voiced        = list(ring)
                     silence_count = 0
                     timeout_left  = timeout_max
-                    self._state  = "LISTENING"
+                    self._state   = "LISTENING"
                     ring.clear()
 
             elif self._state == "LISTENING":
@@ -202,8 +189,8 @@ class MicrophoneCapture:
                     self._state = "IDLE"
                     continue
 
-                voiced.append(vad_frame)
-                if self._vad.is_speech(vad_frame, config.MIC_SAMPLE_RATE):
+                voiced.append(frame)
+                if self._vad.is_speech(frame, config.MIC_SAMPLE_RATE):
                     silence_count = 0
                     timeout_left  = timeout_max
                 else:

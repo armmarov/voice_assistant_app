@@ -59,16 +59,14 @@ ASR_TIMEOUT = int(os.getenv("ASR_TIMEOUT", "30"))
 TTS_TIMEOUT = int(os.getenv("TTS_TIMEOUT", "60"))
 LLM_TIMEOUT = int(os.getenv("LLM_TIMEOUT", "60"))
 
-# ─── Wake Word (Picovoice Porcupine) ──────────────────────────────────────────
-# Setup:
-#   1. Register free at https://console.picovoice.ai/ → get your AccessKey
-#   2. Create a custom "Hey Robot" wake word → download the .ppn file
-#   3. Set env vars:
-#        PORCUPINE_ACCESS_KEY=<your-key>
-#        WAKE_WORD_MODEL_PATH=/path/to/hey-robot_en_linux_v3_0_0.ppn
-#   4. For testing: omit WAKE_WORD_MODEL_PATH to use built-in "porcupine" keyword.
-PORCUPINE_ACCESS_KEY   = os.getenv("PORCUPINE_ACCESS_KEY",  "")
-WAKE_WORD_MODEL_PATH   = os.getenv("WAKE_WORD_MODEL_PATH",  "")   # empty → built-in "porcupine"
-WAKE_WORD_SENSITIVITY  = float(os.getenv("WAKE_WORD_SENSITIVITY",  "0.5"))
+# ─── Wake Word (OpenWakeWord) ─────────────────────────────────────────────────
+# Built-in models (no download needed):
+#   hey_jarvis, alexa, hey_mycroft, hey_rhasspy
+# Custom model:
+#   Set WAKE_WORD_MODEL_PATH to a local .onnx file.
+#   Leave empty to use the built-in model set by WAKE_WORD_MODEL.
+WAKE_WORD_MODEL        = os.getenv("WAKE_WORD_MODEL",       "hey_jarvis")
+WAKE_WORD_MODEL_PATH   = os.getenv("WAKE_WORD_MODEL_PATH",  "")     # empty → use WAKE_WORD_MODEL
+WAKE_WORD_THRESHOLD    = float(os.getenv("WAKE_WORD_THRESHOLD",    "0.5"))
 WAKE_LISTEN_TIMEOUT_MS = int(os.getenv("WAKE_LISTEN_TIMEOUT_MS", "10000"))
 WAKE_WORD_ACK_PHRASE   = os.getenv("WAKE_WORD_ACK_PHRASE", "Yes sir")
