@@ -159,26 +159,22 @@ make deploy ROBOT_USER=ubuntu ROBOT_HOST=192.168.0.63 ROBOT_DIR=/opt/myrobot
 
 ## Quick Start (dev / source run)
 
-### 1. Get a Picovoice Access Key
-
-Register for free at [https://console.picovoice.ai/](https://console.picovoice.ai/) and copy your **AccessKey**.
-
-### 2. Create your `.env` file
+### 1. Create your `.env` file
 
 ```bash
 cp .env.example .env
 ```
 
-Open `.env` and fill in at minimum:
+All variables have sensible defaults. The default wake word engine is **OpenWakeWord** (free, no key needed).
+
+If you prefer **Porcupine** (faster detection), register at [https://console.picovoice.ai/](https://console.picovoice.ai/) and set:
 
 ```ini
+WAKE_WORD_ENGINE=porcupine
 PORCUPINE_ACCESS_KEY=<your-access-key>
 ```
 
-All other variables have sensible defaults — override only what you need.
-`.env` is git-ignored and never committed.
-
-### 3. Run from source
+### 2. Run from source
 
 ```bash
 make run
@@ -190,41 +186,50 @@ The assistant starts in **IDLE** mode. Say the wake word to activate it, then sp
 
 ## Wake Word Setup
 
-The assistant uses [Picovoice Porcupine](https://picovoice.ai/platform/porcupine/) for always-on, on-device wake word detection.
+Two wake word engines are supported. Set `WAKE_WORD_ENGINE` in `.env`:
 
-### Testing (built-in keyword)
+| Engine | Speed | Cost | Setup |
+|---|---|---|---|
+| `openwakeword` (default) | Slower | Free | No key needed |
+| `porcupine` | Fast | Free tier available | Requires access key |
 
-If `WAKE_WORD_MODEL_PATH` is not set, the assistant falls back to the built-in **"porcupine"** keyword.
+### Option A: OpenWakeWord (default)
 
-Set in `.env`:
+Built-in models (no download needed): `hey_jarvis`, `alexa`, `hey_mycroft`, `hey_rhasspy`
+
 ```ini
+WAKE_WORD_ENGINE=openwakeword
+WAKE_WORD_MODEL=hey_jarvis
+WAKE_WORD_THRESHOLD=0.5
+```
+
+Custom models: set `WAKE_WORD_MODEL_PATH` to a local `.onnx` or `.tflite` file.
+
+### Option B: Porcupine
+
+Built-in keywords: `porcupine`, `bumblebee`, `alexa`, `jarvis`, `computer`, `hey google`, etc.
+
+1. Register at [https://console.picovoice.ai/](https://console.picovoice.ai/) and copy your **AccessKey**
+2. Set in `.env`:
+
+```ini
+WAKE_WORD_ENGINE=porcupine
 PORCUPINE_ACCESS_KEY=<your-key>
-# WAKE_WORD_MODEL_PATH left empty → say "porcupine" to activate
+PORCUPINE_KEYWORD=jarvis
+PORCUPINE_SENSITIVITY=0.5
 ```
 
-Then run:
-```bash
-make run
-```
-
-### Production ("Hey Robot")
+### Porcupine — Custom keyword ("Hey Robot")
 
 1. Log in to [https://console.picovoice.ai/](https://console.picovoice.ai/)
 2. Go to **Wake Word** → create a new model → type `Hey Robot`
-3. Select platform: **Linux** → download the `.ppn` file (e.g. `hey-robot_en_linux_v3_0_0.ppn`)
-4. Place the `.ppn` file in the project root (it will be copied to the robot automatically by `make deploy`)
-5. Set the values in your `.env` file:
+3. Select platform: **Linux** → download the `.ppn` file
+4. Set in `.env`:
 
 ```ini
+WAKE_WORD_ENGINE=porcupine
 PORCUPINE_ACCESS_KEY=<your-key>
-WAKE_WORD_MODEL_PATH=/opt/voice_assistant/hey-robot_en_linux_v3_0_0.ppn
-```
-
-Then deploy:
-
-```bash
-make deploy ROBOT_HOST=192.168.0.63
-make install ROBOT_HOST=192.168.0.63
+PORCUPINE_KEYWORD_PATH=/opt/voice_assistant/hey-robot_en_linux_v3_0_0.ppn
 ```
 
 ---
@@ -320,7 +325,7 @@ See `docs/` for full Mermaid diagrams:
 
 ```
 IDLE ──── wake word ────► LISTENING ──── utterance ───► ASR → LLM → TTS → Speaker
-            (Porcupine)     (VAD)              │
+     (OWW or Porcupine)     (VAD)              │
                                           timeout 10s
                                                │
                                              IDLE
@@ -333,26 +338,49 @@ IDLE ──── wake word ────► LISTENING ──── utterance ─
 All settings live in `.env` (copy from `.env.example`). Every variable can also
 be set as a regular environment variable — env vars always override `.env` values.
 
+**Wake word:**
+
 | Variable | Default | Description |
 |---|---|---|
-| `PORCUPINE_ACCESS_KEY` | *(required)* | Picovoice console access key |
-| `WAKE_WORD_MODEL_PATH` | `""` | Path to `.ppn` file; empty = built-in "porcupine" |
-| `WAKE_WORD_SENSITIVITY` | `0.5` | Detection sensitivity (0.0 – 1.0) |
+| `WAKE_WORD_ENGINE` | `openwakeword` | Engine: `openwakeword` or `porcupine` |
+| `WAKE_WORD_MODEL` | `hey_jarvis` | OpenWakeWord built-in model name |
+| `WAKE_WORD_MODEL_PATH` | `""` | Path to custom OWW model file |
+| `WAKE_WORD_THRESHOLD` | `0.5` | OpenWakeWord detection threshold (0.0 – 1.0) |
+| `PORCUPINE_ACCESS_KEY` | `""` | Picovoice access key (required for Porcupine) |
+| `PORCUPINE_KEYWORD` | `jarvis` | Porcupine built-in keyword |
+| `PORCUPINE_KEYWORD_PATH` | `""` | Path to custom `.ppn` file |
+| `PORCUPINE_SENSITIVITY` | `0.5` | Porcupine sensitivity (0.0 – 1.0) |
 | `WAKE_LISTEN_TIMEOUT_MS` | `10000` | ms to wait for speech after wake word |
-| `WAKE_WORD_ACK_PHRASE` | `Yes sir` | Phrase spoken after wake word; empty = beep |
-| `MIC_DEVICE_INDEX` | `-1` | PyAudio input device index; -1 = system default |
-| `SPK_DEVICE_INDEX` | `-1` | PyAudio output device index; -1 = system default |
-| `MIC_MUTE_DURING_PLAYBACK` | `true` | Mute mic in software during TTS playback |
-| `LLM_BASE_URL` | `http://localhost:11434/v1` | OpenAI-compatible LLM endpoint |
-| `LLM_API_KEY` | `nokey` | LLM API key |
-| `LLM_MODEL` | `llama3` | Model name |
-| `LLM_SYSTEM_PROMPT` | *(see config.py)* | System prompt |
+| `WAKE_WORD_ACK_PHRASE` | `Yes sir` | Phrase spoken after wake word; empty = beep only |
+
+**Services:**
+
+| Variable | Default | Description |
+|---|---|---|
 | `ASR_BASE_URL` | `http://3.114.138.123:8005` | ASR service base URL |
 | `TTS_BASE_URL` | `http://3.114.138.123:8006` | TTS service base URL |
 | `TTS_VOICE` | `default` | Voice: `default`, `liudao`, `filrty`, `zhiyu` |
+| `LLM_BASE_URL` | `http://localhost:11434/v1` | OpenAI-compatible LLM endpoint |
+| `LLM_API_KEY` | `nokey` | LLM API key |
+| `LLM_MODEL` | `llama3` | Model name |
+| `LLM_MAX_TOKENS` | `150` | Max reply tokens (limits response length) |
+| `LLM_SYSTEM_PROMPT` | *(see config.py)* | System prompt |
+
+**Audio & VAD:**
+
+| Variable | Default | Description |
+|---|---|---|
+| `MIC_DEVICE_INDEX` | `-1` | PyAudio input device index; -1 = system default |
+| `SPK_DEVICE_INDEX` | `-1` | PyAudio output device index; -1 = system default |
+| `MIC_MUTE_DURING_PLAYBACK` | `true` | Mute mic in software during TTS playback |
 | `VAD_AGGRESSIVENESS` | `3` | WebRTC VAD level 0–3 (3 = most aggressive) |
 | `VAD_SILENCE_MS` | `1200` | Silence duration (ms) that ends an utterance |
 | `VAD_MIN_SPEECH_MS` | `2000` | Minimum speech length (ms); shorter clips ignored |
+
+**Timeouts & logging:**
+
+| Variable | Default | Description |
+|---|---|---|
 | `ASR_TIMEOUT` | `30` | ASR HTTP timeout (seconds) |
 | `TTS_TIMEOUT` | `60` | TTS HTTP timeout (seconds) |
 | `LLM_TIMEOUT` | `60` | LLM HTTP timeout (seconds) |
@@ -371,7 +399,7 @@ All configuration is read from `/opt/voice_assistant/.env` on the robot.
 ```bash
 # 1. Fill in your .env locally first
 cp .env.example .env
-editor .env   # set PORCUPINE_ACCESS_KEY, MIC_DEVICE_INDEX, etc.
+editor .env   # set WAKE_WORD_ENGINE, device indices, service URLs, etc.
 
 # 2. Build, copy binary + .env to robot, install service
 make deploy ROBOT_HOST=192.168.0.63
@@ -410,6 +438,25 @@ ssh ubuntu@<robot> "sudo systemctl restart voice_assistant"
 
 ---
 
+## Testing
+
+Individual service tests and a full end-to-end integration test:
+
+```bash
+# Individual services
+python tests/test_asr.py                   # ASR health + transcription
+python tests/test_tts.py                   # TTS health + synthesis
+python tests/test_llm.py                   # LLM health + chat
+
+# End-to-end pipeline (no mic needed)
+python tests/test_e2e.py                   # TTS → ASR → LLM → TTS → ASR round-trip
+python tests/test_e2e.py --output-dir /tmp/e2e_results   # save WAV files
+python tests/test_e2e.py --skip-wake-word                # skip wake word test
+python tests/test_e2e.py --questions "what time is it"   # custom questions
+```
+
+---
+
 ## File Structure
 
 ```
@@ -429,6 +476,11 @@ src/
 ├── audio.py                # AudioPlayer + pcm_frames_to_wav
 ├── capture.py              # MicrophoneCapture (wake word + VAD state machine)
 └── daemon.py               # VoiceAssistantDaemon (pipeline orchestrator)
+tests/
+├── test_asr.py             # ASR service test
+├── test_tts.py             # TTS service test
+├── test_llm.py             # LLM service test
+└── test_e2e.py             # End-to-end integration test
 docs/
 ├── 01_system_overview.md
 ├── 02_capture_state_machine.md

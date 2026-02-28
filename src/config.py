@@ -61,14 +61,26 @@ ASR_TIMEOUT = int(os.getenv("ASR_TIMEOUT", "30"))
 TTS_TIMEOUT = int(os.getenv("TTS_TIMEOUT", "60"))
 LLM_TIMEOUT = int(os.getenv("LLM_TIMEOUT", "60"))
 
-# ─── Wake Word (OpenWakeWord) ─────────────────────────────────────────────────
-# Built-in models (no download needed):
-#   hey_jarvis, alexa, hey_mycroft, hey_rhasspy
-# Custom model:
-#   Set WAKE_WORD_MODEL_PATH to a local .onnx file.
-#   Leave empty to use the built-in model set by WAKE_WORD_MODEL.
+# ─── Wake Word ────────────────────────────────────────────────────────────────
+# Engine: "openwakeword" (free, slower) or "porcupine" (fast, requires access key)
+WAKE_WORD_ENGINE = os.getenv("WAKE_WORD_ENGINE", "openwakeword")
+
+# --- OpenWakeWord settings ---
+# Built-in models: hey_jarvis, alexa, hey_mycroft, hey_rhasspy
+# Custom model: set WAKE_WORD_MODEL_PATH to a local .onnx/.tflite file.
 WAKE_WORD_MODEL        = os.getenv("WAKE_WORD_MODEL",       "hey_jarvis")
 WAKE_WORD_MODEL_PATH   = os.getenv("WAKE_WORD_MODEL_PATH",  "")     # empty → use WAKE_WORD_MODEL
 WAKE_WORD_THRESHOLD    = float(os.getenv("WAKE_WORD_THRESHOLD",    "0.5"))
+
+# --- Porcupine settings ---
+# Get your access key from https://console.picovoice.ai/
+PORCUPINE_ACCESS_KEY      = os.getenv("PORCUPINE_ACCESS_KEY", "")
+# Built-in keywords: porcupine, bumblebee, alexa, jarvis, computer, hey google, etc.
+# Or set PORCUPINE_KEYWORD_PATH to a custom .ppn file.
+PORCUPINE_KEYWORD         = os.getenv("PORCUPINE_KEYWORD",       "jarvis")
+PORCUPINE_KEYWORD_PATH    = os.getenv("PORCUPINE_KEYWORD_PATH",  "")
+PORCUPINE_SENSITIVITY     = float(os.getenv("PORCUPINE_SENSITIVITY", "0.5"))
+
+# --- Common ---
 WAKE_LISTEN_TIMEOUT_MS = int(os.getenv("WAKE_LISTEN_TIMEOUT_MS", "10000"))
 WAKE_WORD_ACK_PHRASE   = os.getenv("WAKE_WORD_ACK_PHRASE", "Yes sir")

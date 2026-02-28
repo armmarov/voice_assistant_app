@@ -33,6 +33,7 @@ class VoiceAssistantDaemon:
         self._mic    = MicrophoneCapture(
             on_utterance=self._handle_utterance,
             on_wake_word=self._handle_wake_word,
+            on_listen_timeout=self._handle_listen_timeout,
         )
         self._busy    = threading.Event()
         self._stop    = threading.Event()
@@ -127,7 +128,7 @@ class VoiceAssistantDaemon:
             wf.writeframes(struct.pack(f"{n_samples}h", *samples))
         return buf.getvalue()
 
-    # ── utterance callback (runs in capture thread) ──────────────────────────
+    # ── callbacks (run in capture thread) ────────────────────────────────────
 
     def _handle_utterance(self, wav_bytes: bytes):
         if self._busy.is_set():
@@ -135,7 +136,14 @@ class VoiceAssistantDaemon:
             return
         threading.Thread(target=self._pipeline, args=(wav_bytes,), daemon=True).start()
 
+    def _handle_listen_timeout(self):
+        """User said nothing after wake word — speak a gentle nudge."""
+        if self._busy.is_set():
+            return
+        threading.Thread(target=self._speak_goodbye, daemon=True).start()
+
     _ERROR_PHRASE = "I'm sorry, my system is having a problem. Can you ask again?"
+    _GOODBYE_PHRASE = "Please call me again if you need anything."
 
     def _pipeline(self, wav_bytes: bytes):
         self._busy.set()
@@ -145,9 +153,9 @@ class VoiceAssistantDaemon:
             t0 = time.time()
             user_text = self._asr.transcribe(wav_bytes)
             log.info("ASR: completed in %.0f ms", (time.time() - t0) * 1000)
-            if not user_text:
-                log.info("ASR: empty result, skipping.")
-                self._speak_error("ASR returned empty result")
+            if not user_text or not user_text.strip().strip('.').strip():
+                log.info("ASR: empty or noise result (%r), skipping.", user_text)
+                self._speak_phrase(self._GOODBYE_PHRASE, "ASR noise/empty")
                 return
             log.info("User said: %s", user_text)
 
@@ -190,19 +198,18 @@ class VoiceAssistantDaemon:
         finally:
             self._busy.clear()
 
-    def _speak_error(self, reason: str):
-        """Speak an apology so the user knows something went wrong."""
-        log.info("Speaking error message (reason: %s)", reason)
+    def _speak_phrase(self, phrase: str, reason: str):
+        """Speak a phrase with mic muted, then unmute and beep."""
+        log.info("Speaking: \"%s\" (reason: %s)", phrase, reason)
         try:
             if config.MIC_MUTE_DURING_PLAYBACK:
                 self._mic.mute()
-            audio = self._tts.synthesize(self._ERROR_PHRASE, timeout=5)
+            audio = self._tts.synthesize(phrase, timeout=5)
             if audio:
                 self._player.play(audio)
             self._player.play(self._generate_beep_wav(freq=660, duration_ms=150))
         except Exception as exc:
-            log.warning("Could not speak error message: %s", exc)
-            # Fall back to just a beep if TTS is also down.
+            log.warning("Could not speak phrase: %s", exc)
             try:
                 self._player.play(self._generate_beep_wav(freq=440, duration_ms=500))
             except Exception:
@@ -210,6 +217,16 @@ class VoiceAssistantDaemon:
         finally:
             if config.MIC_MUTE_DURING_PLAYBACK:
                 self._mic.unmute()
+
+    def _speak_error(self, reason: str):
+        self._speak_phrase(self._ERROR_PHRASE, reason)
+
+    def _speak_goodbye(self):
+        self._busy.set()
+        try:
+            self._speak_phrase(self._GOODBYE_PHRASE, "listen timeout")
+        finally:
+            self._busy.clear()
 
     # ── lifecycle ─────────────────────────────────────────────────────────────
 
