@@ -26,6 +26,8 @@ def pcm_frames_to_wav(pcm_frames: List[bytes], sample_rate: int, channels: int) 
 class AudioPlayer:
     """Plays WAV audio bytes through the system speaker (blocking)."""
 
+    _CHUNK = 1024
+
     def __init__(self):
         self._pa = pyaudio.PyAudio()
         self._lock = threading.Lock()
@@ -33,6 +35,7 @@ class AudioPlayer:
     def play(self, wav_bytes: bytes):
         with self._lock:
             buf = io.BytesIO(wav_bytes)
+            stream = None
             try:
                 with wave.open(buf, "rb") as wf:
                     open_kwargs = dict(
@@ -44,15 +47,38 @@ class AudioPlayer:
                     if config.SPK_DEVICE_INDEX >= 0:
                         open_kwargs["output_device_index"] = config.SPK_DEVICE_INDEX
                     stream = self._pa.open(**open_kwargs)
-                    chunk_size = 1024
-                    data = wf.readframes(chunk_size)
-                    while data:
-                        stream.write(data)
-                        data = wf.readframes(chunk_size)
-                    stream.stop_stream()
-                    stream.close()
+
+                    # Read all PCM data up front so we know the total duration.
+                    frames = wf.readframes(wf.getnframes())
+                    duration_s = wf.getnframes() / wf.getframerate()
+
+                # Run the blocking write loop in a daemon thread so we can
+                # enforce a hard timeout and never hang the pipeline forever.
+                def _write_loop():
+                    try:
+                        offset = 0
+                        while offset < len(frames):
+                            chunk = frames[offset: offset + self._CHUNK]
+                            stream.write(chunk)
+                            offset += self._CHUNK
+                    except Exception as exc:
+                        log.error("Playback write error: %s", exc)
+
+                t = threading.Thread(target=_write_loop, daemon=True)
+                t.start()
+                t.join(timeout=duration_s + 10)
+                if t.is_alive():
+                    log.warning("Playback timed out after %.1fs, aborting.", duration_s + 10)
+
             except Exception as exc:
                 log.error("Playback error: %s", exc)
+            finally:
+                if stream is not None:
+                    try:
+                        stream.stop_stream()
+                        stream.close()
+                    except Exception:
+                        pass
 
     def terminate(self):
         self._pa.terminate()
