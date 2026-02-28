@@ -11,7 +11,7 @@ log = logging.getLogger(__name__)
 class TTSClient:
     """Send text to the TTS service and return WAV bytes."""
 
-    def synthesize(self, text: str) -> Optional[bytes]:
+    def synthesize(self, text: str, timeout: Optional[int] = None) -> Optional[bytes]:
         payload = {
             "target_text": text,
             "voice_type": config.TTS_VOICE,
@@ -21,7 +21,7 @@ class TTSClient:
             resp = requests.post(
                 config.TTS_ENDPOINT,
                 json=payload,
-                timeout=config.TTS_TIMEOUT,
+                timeout=timeout if timeout is not None else config.TTS_TIMEOUT,
             )
             resp.raise_for_status()
             log.debug("TTS received %d bytes", len(resp.content))
