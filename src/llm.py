@@ -30,6 +30,7 @@ class LLMClient:
         payload = {
             "model": config.LLM_MODEL,
             "messages": messages,
+            "max_tokens": config.LLM_MAX_TOKENS,
             "stream": False,
         }
         headers = {"Authorization": config.LLM_API_KEY}

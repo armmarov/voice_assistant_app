@@ -46,12 +46,15 @@ class TTSClient:
             resp = requests.post(
                 config.TTS_ENDPOINT,
                 json=payload,
-                timeout=(10, None),   # 10s connect; no read timeout (watchdog handles stalls)
+                timeout=(10, config.TTS_TIMEOUT),   # 10s connect; TTS_TIMEOUT read timeout
                 stream=True,
             )
             resp.raise_for_status()
+            chunks = 0
             for chunk in resp.iter_content(chunk_size=4096):
                 if chunk:
+                    chunks += 1
                     yield chunk
+            log.debug("TTS stream complete: %d chunks", chunks)
         except requests.RequestException as exc:
             log.error("TTS stream failed: %s", exc)

@@ -53,6 +53,7 @@ class MicrophoneCapture:
         self._mute_lock = threading.Lock()
         self._state = "IDLE"
         self._resume_to_listening = False   # set by resume_listening()
+        self._oww_reset_pending = False     # set by unmute(), consumed in capture loop
 
     # ── setup ────────────────────────────────────────────────────────────────
 
@@ -93,7 +94,8 @@ class MicrophoneCapture:
         with self._mute_lock:
             self._muted = False
             self._resume_to_listening = False
-        log.debug("Microphone unmuted, state → IDLE.")
+            self._oww_reset_pending = True
+        log.info("Microphone unmuted, state → IDLE.")
 
     def resume_listening(self):
         """Unmute and return to LISTENING — used after wake word ack playback."""
@@ -144,6 +146,8 @@ class MicrophoneCapture:
         voiced: List[bytes] = []
         silence_count  = 0
         timeout_left   = 0
+        was_muted      = False
+        idle_frames    = 0
 
         while self._running:
             try:
@@ -164,7 +168,11 @@ class MicrophoneCapture:
                 ring.clear()
                 voiced = []
                 silence_count = 0
+                was_muted = True
                 continue
+            if was_muted:
+                was_muted = False
+                log.info("Capture loop resumed, state → %s", "LISTENING" if resume else "IDLE")
             if resume:
                 self._state = "LISTENING"
                 timeout_left  = timeout_max
@@ -173,11 +181,30 @@ class MicrophoneCapture:
                 log.debug("Resumed LISTENING after ack.")
 
             if self._state == "IDLE":
+                idle_frames += 1
+                # Log heartbeat every ~30s (1000 frames × 30ms)
+                if idle_frames % 1000 == 0:
+                    log.info("Idle: listening for wake word … (%ds)", idle_frames * config.MIC_CHUNK_MS // 1000)
+                with self._mute_lock:
+                    if self._oww_reset_pending:
+                        self._oww_reset_pending = False
+                        self._oww.reset()
+                        # Feed silence frames to flush OWW's internal feature buffer
+                        # so stale data from before mute doesn't affect detection.
+                        silence = np.zeros(self._VAD_FRAME_SAMPLES, dtype=np.int16)
+                        for _ in range(30):  # ~900ms of silence
+                            self._oww.predict(silence)
+                        log.info("OpenWakeWord model reset and flushed.")
                 ring.append(frame)
                 pcm = np.frombuffer(frame, dtype=np.int16)
                 prediction = self._oww.predict(pcm)
+                max_score = max(prediction.values()) if prediction else 0
+                # Log best score every ~3s so we can see if OWW is responding
+                if idle_frames % 100 == 0 and max_score > 0.01:
+                    log.debug("Wake word score: %.4f", max_score)
                 if any(score >= config.WAKE_WORD_THRESHOLD for score in prediction.values()):
-                    log.info("Wake word detected! Listening for command …")
+                    idle_frames = 0
+                    log.info("Wake word detected! (score=%.4f)", max_score)
                     self._oww.reset()
                     if self._on_wake_word:
                         self._on_wake_word()
@@ -198,21 +225,29 @@ class MicrophoneCapture:
                     continue
 
                 voiced.append(frame)
-                if self._vad.is_speech(frame, config.MIC_SAMPLE_RATE):
+                is_speech = self._vad.is_speech(frame, config.MIC_SAMPLE_RATE)
+                if is_speech:
+                    if silence_count > 0 or len(voiced) == 1:
+                        log.info("VAD: speech detected (voiced frames: %d)", len(voiced))
                     silence_count = 0
                     timeout_left  = timeout_max
                 else:
                     silence_count += 1
                     if silence_count >= silence_limit:
+                        duration_ms = len(voiced) * config.MIC_CHUNK_MS
                         if len(voiced) >= min_speech:
+                            log.info("VAD: utterance complete (%d ms), sending to ASR …", duration_ms)
                             wav = pcm_frames_to_wav(
                                 voiced, config.MIC_SAMPLE_RATE, config.MIC_CHANNELS
                             )
                             self._on_utterance(wav)
+                            voiced = []
+                            ring.clear()
+                            silence_count = 0
+                            self._state = "IDLE"
                         else:
-                            log.debug("Utterance too short, ignored.")
-                        voiced = []
-                        ring.clear()
-                        silence_count = 0
-                        self._state = "IDLE"
-                        log.debug("Utterance captured → IDLE.")
+                            # Too short — stay in LISTENING so user can keep talking.
+                            log.info("VAD: utterance too short (%d ms < %d ms), still listening …", duration_ms, config.VAD_MIN_SPEECH_MS)
+                            voiced = []
+                            silence_count = 0
+                            timeout_left = timeout_max

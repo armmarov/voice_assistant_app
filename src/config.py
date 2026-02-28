@@ -13,9 +13,11 @@ TTS_VOICE    = os.getenv("TTS_VOICE", "default")   # liudao, filrty, zhiyu, defa
 LLM_BASE_URL  = os.getenv("LLM_BASE_URL", "http://localhost:11434/v1")
 LLM_API_KEY   = os.getenv("LLM_API_KEY",  "nokey")
 LLM_MODEL     = os.getenv("LLM_MODEL",    "llama3")
+LLM_MAX_TOKENS = int(os.getenv("LLM_MAX_TOKENS", "150"))
 LLM_SYSTEM_PROMPT = os.getenv(
     "LLM_SYSTEM_PROMPT",
-    "You are a helpful voice assistant. Keep answers concise and conversational.",
+    "You are a helpful voice assistant. Your responses will be spoken aloud via text-to-speech. "
+    "Keep answers to 1-3 short sentences. No bullet points, no lists, no markdown, no emojis.",
 )
 
 # ─── Echo Cancellation ────────────────────────────────────────────────────────

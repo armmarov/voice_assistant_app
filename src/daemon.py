@@ -1,6 +1,7 @@
 import io
 import logging
 import math
+import re
 import signal
 import struct
 import subprocess
@@ -38,6 +39,31 @@ class VoiceAssistantDaemon:
         self._aec_active = self._detect_aec()
 
     @staticmethod
+    def _clean_for_tts(text: str) -> str:
+        """Strip markdown, emojis, and symbols so TTS receives plain speech text."""
+        # Remove markdown bold/italic markers
+        text = re.sub(r'\*{1,3}', '', text)
+        # Remove markdown headers (## Header)
+        text = re.sub(r'^#{1,6}\s+', '', text, flags=re.MULTILINE)
+        # Remove markdown bullet points (- item, * item)
+        text = re.sub(r'^\s*[-*]\s+', '', text, flags=re.MULTILINE)
+        # Remove markdown links [text](url) → text
+        text = re.sub(r'\[([^\]]*)\]\([^)]*\)', r'\1', text)
+        # Remove inline code backticks
+        text = re.sub(r'`([^`]*)`', r'\1', text)
+        # Remove emojis (Unicode emoji ranges)
+        text = re.sub(
+            r'[\U0001F300-\U0001F9FF\U00002600-\U000027BF\U0000FE00-\U0000FE0F'
+            r'\U0000200D\U00002702-\U000027B0\U0001FA00-\U0001FA6F'
+            r'\U0001FA70-\U0001FAFF]+', '', text)
+        # Remove remaining special symbols but keep basic punctuation
+        text = re.sub(r'[^\w\s.,!?;:\'\"-/()]+', '', text)
+        # Collapse multiple blank lines / whitespace
+        text = re.sub(r'\n{3,}', '\n\n', text)
+        text = re.sub(r'[ \t]+', ' ', text)
+        return text.strip()
+
+    @staticmethod
     def _detect_aec() -> bool:
         """Auto-detect whether PulseAudio AEC (module-echo-cancel) is active."""
         try:
@@ -58,25 +84,31 @@ class VoiceAssistantDaemon:
     # ── wake word callback (runs in capture thread) ──────────────────────────
 
     def _handle_wake_word(self):
-        # Play beep immediately (no network, no mute) so the user gets
-        # instant feedback and can start speaking right away.
-        # Then say the ack phrase via TTS in the background — mic stays
-        # in LISTENING state throughout so the user's command is not lost.
+        # Play beep + ack phrase in a background thread.
+        # Mic is muted during playback to prevent the ack audio from being
+        # captured as the user's utterance, then resumes LISTENING.
         log.info("Wake word acknowledged.")
         threading.Thread(target=self._play_ack, daemon=True).start()
 
     def _play_ack(self):
         try:
-            # 1. Beep first — instant, local, no mic mute.
-            self._player.play(self._generate_beep_wav())
+            # Mute mic during ack playback so the audio doesn't
+            # get captured by VAD as the user's utterance.
+            self._mic.mute()
 
-            # 2. "Yes sir" via TTS — short timeout, fall back to silence.
+            # 1. "Yes sir" via TTS.
             if config.WAKE_WORD_ACK_PHRASE:
                 audio = self._tts.synthesize(config.WAKE_WORD_ACK_PHRASE, timeout=3)
                 if audio:
                     self._player.play(audio)
+
+            # 2. Beep after "Yes sir" — signal "speak now".
+            self._player.play(self._generate_beep_wav(freq=1200, duration_ms=100))
         except Exception as exc:
             log.warning("Ack playback failed: %s", exc)
+        finally:
+            # Resume LISTENING (not IDLE) so user can speak their command.
+            self._mic.resume_listening()
 
     @staticmethod
     def _generate_beep_wav(freq: int = 880, duration_ms: int = 200, volume: float = 0.5) -> bytes:
@@ -103,24 +135,36 @@ class VoiceAssistantDaemon:
             return
         threading.Thread(target=self._pipeline, args=(wav_bytes,), daemon=True).start()
 
+    _ERROR_PHRASE = "I'm sorry, my system is having a problem. Can you ask again?"
+
     def _pipeline(self, wav_bytes: bytes):
         self._busy.set()
         try:
             # 1. ASR
-            log.info("ASR: transcribing …")
+            log.info("ASR: transcribing (%d bytes) …", len(wav_bytes))
+            t0 = time.time()
             user_text = self._asr.transcribe(wav_bytes)
+            log.info("ASR: completed in %.0f ms", (time.time() - t0) * 1000)
             if not user_text:
                 log.info("ASR: empty result, skipping.")
+                self._speak_error("ASR returned empty result")
                 return
             log.info("User said: %s", user_text)
 
             # 2. LLM
             log.info("LLM: generating reply …")
+            t0 = time.time()
             reply = self._llm.chat(user_text)
+            log.info("LLM: completed in %.0f ms", (time.time() - t0) * 1000)
             if not reply:
                 log.warning("LLM: no reply.")
+                self._speak_error("LLM returned no reply")
                 return
             log.info("Assistant: %s", reply)
+
+            # Clean reply for TTS — strip markdown, emojis, symbols.
+            tts_text = self._clean_for_tts(reply)
+            log.debug("TTS text: %s", tts_text)
 
             # 3+4. TTS stream → play simultaneously.
             # Audio starts on the first chunk so the user hears the response
@@ -133,12 +177,39 @@ class VoiceAssistantDaemon:
             if config.MIC_MUTE_DURING_PLAYBACK:
                 self._mic.mute()
             try:
-                self._player.play_stream(self._tts.synthesize_stream(reply))
+                self._player.play_stream(self._tts.synthesize_stream(tts_text))
             finally:
+                # Low beep — signal "reply done, say hey jarvis again".
+                self._player.play(self._generate_beep_wav(freq=660, duration_ms=150))
+                log.info("TTS playback finished, resuming mic.")
                 if config.MIC_MUTE_DURING_PLAYBACK:
                     self._mic.unmute()
+        except Exception as exc:
+            log.error("Pipeline error: %s", exc)
+            self._speak_error(str(exc))
         finally:
             self._busy.clear()
+
+    def _speak_error(self, reason: str):
+        """Speak an apology so the user knows something went wrong."""
+        log.info("Speaking error message (reason: %s)", reason)
+        try:
+            if config.MIC_MUTE_DURING_PLAYBACK:
+                self._mic.mute()
+            audio = self._tts.synthesize(self._ERROR_PHRASE, timeout=5)
+            if audio:
+                self._player.play(audio)
+            self._player.play(self._generate_beep_wav(freq=660, duration_ms=150))
+        except Exception as exc:
+            log.warning("Could not speak error message: %s", exc)
+            # Fall back to just a beep if TTS is also down.
+            try:
+                self._player.play(self._generate_beep_wav(freq=440, duration_ms=500))
+            except Exception:
+                pass
+        finally:
+            if config.MIC_MUTE_DURING_PLAYBACK:
+                self._mic.unmute()
 
     # ── lifecycle ─────────────────────────────────────────────────────────────
 
