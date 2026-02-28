@@ -58,36 +58,25 @@ class VoiceAssistantDaemon:
     # ── wake word callback (runs in capture thread) ──────────────────────────
 
     def _handle_wake_word(self):
-        # Set busy and mute immediately — before spawning the ack thread — so
-        # no utterance slips through and the capture loop stops collecting audio
-        # while the TTS ack call is in flight.
-        self._busy.set()
-        if config.MIC_MUTE_DURING_PLAYBACK:
-            self._mic.mute()
-        if not config.WAKE_WORD_ACK_PHRASE:
-            # No ack phrase — go straight to LISTENING.
-            if config.MIC_MUTE_DURING_PLAYBACK:
-                self._mic.resume_listening()
-            self._busy.clear()
-            return
+        # Play beep immediately (no network, no mute) so the user gets
+        # instant feedback and can start speaking right away.
+        # Then say the ack phrase via TTS in the background — mic stays
+        # in LISTENING state throughout so the user's command is not lost.
+        log.info("Wake word acknowledged.")
         threading.Thread(target=self._play_ack, daemon=True).start()
 
     def _play_ack(self):
-        log.info("Playing wake word acknowledgement …")
         try:
-            # Use a short timeout for the ack — fall back to beep if TTS is slow
-            # to avoid blocking the mic mute for the full TTS_TIMEOUT duration.
-            audio = self._tts.synthesize(config.WAKE_WORD_ACK_PHRASE, timeout=3)
-            if not audio:
-                log.debug("TTS unavailable — playing beep.")
-                audio = self._generate_beep_wav()
-            self._player.play(audio)
+            # 1. Beep first — instant, local, no mic mute.
+            self._player.play(self._generate_beep_wav())
+
+            # 2. "Yes sir" via TTS — short timeout, fall back to silence.
+            if config.WAKE_WORD_ACK_PHRASE:
+                audio = self._tts.synthesize(config.WAKE_WORD_ACK_PHRASE, timeout=3)
+                if audio:
+                    self._player.play(audio)
         except Exception as exc:
-            log.warning("Ack playback failed: %s — skipping.", exc)
-        finally:
-            if config.MIC_MUTE_DURING_PLAYBACK:
-                self._mic.resume_listening()   # unmute → back to LISTENING
-            self._busy.clear()
+            log.warning("Ack playback failed: %s", exc)
 
     @staticmethod
     def _generate_beep_wav(freq: int = 880, duration_ms: int = 200, volume: float = 0.5) -> bytes:
