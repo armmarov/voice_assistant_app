@@ -133,24 +133,18 @@ class VoiceAssistantDaemon:
                 return
             log.info("Assistant: %s", reply)
 
-            # 3. TTS
-            log.info("TTS: synthesizing …")
-            audio = self._tts.synthesize(reply)
-            if not audio:
-                log.warning("TTS: no audio returned.")
-                return
-
-            # 4. Play
-            # Mute and AEC are independent — both can be active simultaneously.
+            # 3+4. TTS stream → play simultaneously.
+            # Audio starts on the first chunk so the user hears the response
+            # before TTS finishes generating — no full-generation wait.
             log.info(
-                "Playing response … (mute=%s aec=%s)",
+                "TTS: streaming + playing … (mute=%s aec=%s)",
                 config.MIC_MUTE_DURING_PLAYBACK,
                 self._aec_active,
             )
             if config.MIC_MUTE_DURING_PLAYBACK:
                 self._mic.mute()
             try:
-                self._player.play(audio)
+                self._player.play_stream(self._tts.synthesize_stream(reply))
             finally:
                 if config.MIC_MUTE_DURING_PLAYBACK:
                     self._mic.unmute()

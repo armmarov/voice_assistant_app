@@ -1,8 +1,9 @@
 import io
 import logging
 import threading
+import time
 import wave
-from typing import List
+from typing import Iterator, List
 
 import pyaudio
 
@@ -72,6 +73,54 @@ class AudioPlayer:
 
             except Exception as exc:
                 log.error("Playback error: %s", exc)
+            finally:
+                if stream is not None:
+                    try:
+                        stream.stop_stream()
+                        stream.close()
+                    except Exception:
+                        pass
+
+    def play_stream(self, pcm_chunks: Iterator[bytes]):
+        """Play raw PCM chunks (44100 Hz, mono, 16-bit) as they arrive.
+
+        Starts emitting audio on the first chunk so playback begins before
+        TTS finishes generating — eliminating the full generation wait.
+        A watchdog aborts if no new chunk arrives for 10 seconds.
+        """
+        with self._lock:
+            stream = None
+            try:
+                open_kwargs = dict(
+                    format=pyaudio.paInt16,
+                    channels=config.SPK_CHANNELS,
+                    rate=config.SPK_SAMPLE_RATE,
+                    output=True,
+                )
+                if config.SPK_DEVICE_INDEX >= 0:
+                    open_kwargs["output_device_index"] = config.SPK_DEVICE_INDEX
+                stream = self._pa.open(**open_kwargs)
+
+                last_write = [time.monotonic()]
+
+                def _write_loop():
+                    try:
+                        for chunk in pcm_chunks:
+                            stream.write(chunk)
+                            last_write[0] = time.monotonic()
+                    except Exception as exc:
+                        log.error("Stream playback write error: %s", exc)
+
+                t = threading.Thread(target=_write_loop, daemon=True)
+                t.start()
+                while t.is_alive():
+                    t.join(timeout=1.0)
+                    if t.is_alive() and time.monotonic() - last_write[0] > 10:
+                        log.warning("Stream playback stalled for 10s, aborting.")
+                        break
+
+            except Exception as exc:
+                log.error("Stream playback error: %s", exc)
             finally:
                 if stream is not None:
                     try:
