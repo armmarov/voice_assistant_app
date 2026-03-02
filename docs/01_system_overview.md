@@ -9,7 +9,7 @@ flowchart TD
     PA[PulseAudio\nOS audio server]
     AEC[module-echo-cancel\nWebRTC AEC\nauto-detected at startup]
     PYAUDIO_IN[PyAudio\nreads PCM frames]
-    PORCUPINE[Porcupine\nWake Word Detection]
+    PORCUPINE[Wake Word Engine\nPorcupine or OpenWakeWord]
     VAD[WebRTC VAD\nVoice Activity Detection]
     WAV[pcm_frames_to_wav\nPCM → WAV bytes]
     ASR[ASR Service\nHTTP POST]
@@ -42,6 +42,6 @@ flowchart TD
 | OS / Kernel | ALSA driver | Kernel |
 | OS / Audio server | PulseAudio, AEC | User-space OS |
 | App — I/O | PyAudio | Inside binary |
-| App — Wake word | Porcupine | Inside binary |
+| App — Wake word | Porcupine / OpenWakeWord | Inside binary |
 | App — VAD | WebRTC VAD | Inside binary |
 | App — AI services | ASR, LLM, TTS | Network (HTTP) |

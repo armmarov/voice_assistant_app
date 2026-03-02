@@ -45,12 +45,21 @@ sequenceDiagram
     end
 
     DM ->> MIC: mute()
-    DM ->> PLY: play(wav_bytes)
+    DM ->> PLY: play_stream(tts_chunks)
     PLY -->> DM: playback complete
-    DM ->> MIC: unmute() → state = IDLE
+    DM ->> PLY: play(beep 660Hz)
+    DM ->> MIC: resume_conversation()\n→ state = LISTENING\n→ in_conversation = true\n→ timeout = 5 min
     DM ->> DM: busy.clear()
 
-    Note over CL: Back to IDLE\nwaiting for wake word
+    Note over CL: Back to LISTENING\n(conversation mode)\nuser can ask next question\nwithout wake word
+
+    alt 5 min silence
+        CL ->> CL: conversation timeout
+        CL ->> DM: on_listen_timeout()
+        DM ->> DM: speak goodbye
+        DM ->> MIC: unmute() → state = IDLE
+        Note over CL: Back to IDLE\nwake word required
+    end
 ```
 
 ## Pipeline Error Handling
@@ -70,7 +79,7 @@ flowchart TD
     TTS_OK{audio returned?}
     SKIP_TTS[Skip\nlog: no audio]
     PLAY[Play audio\nmic muted]
-    DONE([busy.clear\nstate = IDLE])
+    DONE([busy.clear\nresume_conversation\nstate = LISTENING])
 
     START --> BUSY
     BUSY -->|yes| DROP --> DONE

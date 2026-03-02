@@ -38,8 +38,8 @@ flowchart TD
         TTS2[TTS.synthesize]
         PLAY2[AudioPlayer.play]
         MUTE2[mic.mute]
-        UNMUTE[mic.unmute]
-        PIPE --> ASR2 --> LLM2 --> TTS2 --> MUTE2 --> PLAY2 --> UNMUTE
+        RESUME_CONV[mic.resume_conversation]
+        PIPE --> ASR2 --> LLM2 --> TTS2 --> MUTE2 --> PLAY2 --> RESUME_CONV
     end
 
     RUN -->|mic.start| CAPTURE
@@ -54,7 +54,7 @@ flowchart LR
     subgraph SHARED ["Shared State"]
         BUSY["_busy : threading.Event\nguards pipeline + ack\nprevents utterance overlap"]
         STOP["_stop : threading.Event\nsignals main loop to exit"]
-        MLOCK["_mute_lock : threading.Lock\nguards _muted + _resume_to_listening"]
+        MLOCK["_mute_lock : threading.Lock\nguards _muted + _resume flags"]
         HIST["LLMClient._lock : threading.Lock\nguards conversation history"]
         PLOCK["AudioPlayer._lock : threading.Lock\nguards PyAudio output stream"]
     end
@@ -107,4 +107,4 @@ gantt
 | `_busy` also set during ack playback | Prevents utterance captured during ack from starting pipeline |
 | Capture thread never blocks on network | All HTTP calls happen in pipeline/ack threads |
 | `AudioPlayer` has its own lock | Safe if ack and pipeline race to play (queued, not crashed) |
-| `resume_listening()` vs `unmute()` | Ack → LISTENING, pipeline → IDLE |
+| `resume_listening()` vs `resume_conversation()` vs `unmute()` | Ack → LISTENING (wake timeout), pipeline → LISTENING (conversation timeout), goodbye → IDLE |

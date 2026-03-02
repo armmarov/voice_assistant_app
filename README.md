@@ -324,12 +324,20 @@ See `docs/` for full Mermaid diagrams:
 ### State Machine (summary)
 
 ```
-IDLE ──── wake word ────► LISTENING ──── utterance ───► ASR → LLM → TTS → Speaker
-     (OWW or Porcupine)     (VAD)              │
-                                          timeout 10s
-                                               │
-                                             IDLE
+                    ┌─────────────────────────────────────────────────┐
+                    │          Conversation Mode (5 min timeout)      │
+                    │                                                 │
+IDLE ── wake word ──► LISTENING ── utterance ──► ASR → LLM → TTS ──► LISTENING
+  ▲  (OWW/Porcupine)   (VAD)                                    (keep talking)
+  │                       │
+  │                  5 min silence
+  │                       │
+  └───── goodbye ─────────┘
 ```
+
+After the wake word, the system enters **conversation mode**: users can keep asking
+questions without repeating the wake word. After 5 minutes of silence (configurable
+via `CONVERSATION_TIMEOUT_MS`), the system says goodbye and returns to IDLE.
 
 ---
 
@@ -351,6 +359,7 @@ be set as a regular environment variable — env vars always override `.env` val
 | `PORCUPINE_KEYWORD_PATH` | `""` | Path to custom `.ppn` file |
 | `PORCUPINE_SENSITIVITY` | `0.5` | Porcupine sensitivity (0.0 – 1.0) |
 | `WAKE_LISTEN_TIMEOUT_MS` | `10000` | ms to wait for speech after wake word |
+| `CONVERSATION_TIMEOUT_MS` | `300000` | ms of silence before ending conversation (5 min) |
 | `WAKE_WORD_ACK_PHRASE` | `Yes sir` | Phrase spoken after wake word; empty = beep only |
 
 **Services:**
