@@ -1,0 +1,35 @@
+[Unit]
+Description=Voice Assistant Daemon — Python (Mic → ASR → LLM → TTS → Speaker)
+After=network.target sound.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=ubuntu
+Group=ubuntu
+
+WorkingDirectory=/opt/voice_assistant
+ExecStart=/usr/bin/python3 /opt/voice_assistant/voice_assistant.py
+
+# ── Configuration ─────────────────────────────────────────────────────────────
+# All settings are loaded from .env in the working directory.
+# Copy .env.example → .env on the robot and fill in your values:
+#
+#   scp .env.example ubuntu@<robot>:/opt/voice_assistant/.env
+#   ssh ubuntu@<robot> "nano /opt/voice_assistant/.env"
+#
+# Variables set here as Environment= override .env values.
+EnvironmentFile=-/opt/voice_assistant/.env
+
+# Allow access to audio devices
+SupplementaryGroups=audio
+
+Restart=on-failure
+RestartSec=5
+
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=voice_assistant_python
+
+[Install]
+WantedBy=multi-user.target
