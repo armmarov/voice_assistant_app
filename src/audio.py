@@ -1,15 +1,26 @@
 import io
 import logging
+import struct
 import threading
 import time
 import wave
 from typing import Iterator, List
 
+import numpy as np
 import pyaudio
 
 from . import config
 
 log = logging.getLogger(__name__)
+
+
+def _apply_gain(pcm_bytes: bytes, gain: float) -> bytes:
+    """Amplify 16-bit PCM samples by *gain*, clipping to int16 range."""
+    if gain == 1.0:
+        return pcm_bytes
+    samples = np.frombuffer(pcm_bytes, dtype=np.int16).astype(np.int32)
+    samples = np.clip(samples * gain, -32768, 32767).astype(np.int16)
+    return samples.tobytes()
 
 
 def pcm_frames_to_wav(pcm_frames: List[bytes], sample_rate: int, channels: int) -> bytes:
@@ -51,6 +62,7 @@ class AudioPlayer:
 
                     # Read all PCM data up front so we know the total duration.
                     frames = wf.readframes(wf.getnframes())
+                    frames = _apply_gain(frames, config.TTS_VOLUME_GAIN)
                     duration_s = wf.getnframes() / wf.getframerate()
 
                 # Run the blocking write loop in a daemon thread so we can
@@ -103,10 +115,12 @@ class AudioPlayer:
 
                 last_write = [time.monotonic()]
 
+                gain = config.TTS_VOLUME_GAIN
+
                 def _write_loop():
                     try:
                         for chunk in pcm_chunks:
-                            stream.write(chunk)
+                            stream.write(_apply_gain(chunk, gain))
                             last_write[0] = time.monotonic()
                     except Exception as exc:
                         log.error("Stream playback write error: %s", exc)

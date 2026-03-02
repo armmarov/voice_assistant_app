@@ -51,6 +51,7 @@ VAD_MIN_SPEECH_MS  = int(os.getenv("VAD_MIN_SPEECH_MS",  "2000")) # ignore < N m
 # ─── Audio Playback ───────────────────────────────────────────────────────────
 SPK_SAMPLE_RATE = 44100   # TTS output is 44100 Hz mono 16-bit
 SPK_CHANNELS    = 1
+TTS_VOLUME_GAIN = float(os.getenv("TTS_VOLUME_GAIN", "1.0"))  # amplify TTS before playback (e.g. 3.0 = 3x louder)
 
 # ─── Logging ──────────────────────────────────────────────────────────────────
 LOG_FILE  = os.getenv("LOG_FILE",  "/var/log/voice_assistant.log")
