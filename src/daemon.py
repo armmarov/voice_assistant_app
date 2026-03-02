@@ -230,8 +230,22 @@ class VoiceAssistantDaemon:
 
     # ── lifecycle ─────────────────────────────────────────────────────────────
 
+    _GREETING = "Hi, I am Jarvis your robot assistant. Please ask me if you have any question."
+
     def run(self):
         log.info("Voice Assistant starting …")
+
+        # Speak greeting before activating the mic so the TTS audio
+        # doesn't get picked up as a wake word or utterance.
+        try:
+            audio = self._tts.synthesize(self._GREETING, timeout=5)
+            if audio:
+                self._player.play(audio)
+                self._player.play(self._generate_beep_wav(freq=660, duration_ms=150))
+                log.info("Greeting played.")
+        except Exception as exc:
+            log.warning("Could not play greeting: %s", exc)
+
         self._mic.start()
 
         for sig in (signal.SIGINT, signal.SIGTERM):
