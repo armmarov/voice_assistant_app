@@ -170,7 +170,7 @@ class VoiceAssistantDaemon:
             is_noise = (
                 not user_text
                 or not user_text.strip().strip('.').strip()
-                or self._is_non_english(user_text)
+                or (config.LLM_LANGUAGE.lower() == "english" and self._is_non_english(user_text))
             )
             if is_noise:
                 self._noise_streak += 1

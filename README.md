@@ -325,19 +325,20 @@ See `docs/` for full Mermaid diagrams:
 
 ```
                     ┌─────────────────────────────────────────────────┐
-                    │          Conversation Mode (5 min timeout)      │
+                    │          Conversation Mode (30s timeout)         │
                     │                                                 │
 IDLE ── wake word ──► LISTENING ── utterance ──► ASR → LLM → TTS ──► LISTENING
   ▲  (OWW/Porcupine)   (VAD)                                    (keep talking)
   │                       │
-  │                  5 min silence
+  │                  30s silence / noise streak
   │                       │
   └───── goodbye ─────────┘
 ```
 
 After the wake word, the system enters **conversation mode**: users can keep asking
-questions without repeating the wake word. After 5 minutes of silence (configurable
-via `CONVERSATION_TIMEOUT_MS`), the system says goodbye and returns to IDLE.
+questions without repeating the wake word. After 30 seconds of silence (configurable
+via `CONVERSATION_TIMEOUT_MS`) or too many consecutive noise results (`MAX_NOISE_STREAK`),
+the system says goodbye and returns to IDLE.
 
 ---
 
@@ -359,7 +360,8 @@ be set as a regular environment variable — env vars always override `.env` val
 | `PORCUPINE_KEYWORD_PATH` | `""` | Path to custom `.ppn` file |
 | `PORCUPINE_SENSITIVITY` | `0.5` | Porcupine sensitivity (0.0 – 1.0) |
 | `WAKE_LISTEN_TIMEOUT_MS` | `10000` | ms to wait for speech after wake word |
-| `CONVERSATION_TIMEOUT_MS` | `300000` | ms of silence before ending conversation (5 min) |
+| `CONVERSATION_TIMEOUT_MS` | `30000` | ms of silence before ending conversation (30s) |
+| `MAX_NOISE_STREAK` | `3` | Consecutive ASR noise results before returning to IDLE |
 | `WAKE_WORD_ACK_PHRASE` | `Yes sir` | Phrase spoken after wake word; empty = beep only |
 
 **Services:**
@@ -372,6 +374,7 @@ be set as a regular environment variable — env vars always override `.env` val
 | `LLM_BASE_URL` | `http://localhost:11434/v1` | OpenAI-compatible LLM endpoint |
 | `LLM_API_KEY` | `nokey` | LLM API key |
 | `LLM_MODEL` | `llama3` | Model name |
+| `LLM_LANGUAGE` | `""` | Force response language (e.g. `English`, `Chinese`); empty = any |
 | `LLM_MAX_TOKENS` | `150` | Max reply tokens (limits response length) |
 | `LLM_SYSTEM_PROMPT` | *(see config.py)* | System prompt |
 
@@ -474,6 +477,7 @@ config.py                   # Redirect shim → src/config.py
 requirements.txt            # Python dependencies
 Makefile                    # Build, deploy, and service management
 voice_assistant.service     # systemd unit file (runs compiled binary)
+voice_assistant_python.service  # systemd unit file (runs from Python source)
 .env.example                # Configuration template — copy to .env and fill in values
 .env                        # Your local config (git-ignored, never committed)
 API_DOCUMENTATION_EN.md     # ASR / TTS API reference
