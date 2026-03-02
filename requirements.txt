@@ -2,5 +2,5 @@ pyaudio>=0.2.14
 webrtcvad>=2.0.10
 requests>=2.31.0
 openwakeword>=0.6.0
-numpy>=1.21.0
+numpy>=1.21.0,<2
 python-dotenv>=1.0.0
