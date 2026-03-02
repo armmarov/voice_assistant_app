@@ -38,6 +38,7 @@ class VoiceAssistantDaemon:
         self._busy    = threading.Event()
         self._stop    = threading.Event()
         self._aec_active = self._detect_aec()
+        self._noise_streak = 0   # consecutive ASR noise results
 
     @staticmethod
     def _clean_for_tts(text: str) -> str:
@@ -63,6 +64,18 @@ class VoiceAssistantDaemon:
         text = re.sub(r'\n{3,}', '\n\n', text)
         text = re.sub(r'[ \t]+', ' ', text)
         return text.strip()
+
+    @staticmethod
+    def _is_non_english(text: str) -> bool:
+        """Return True if >50% of alphabetic characters are non-Latin (CJK, Cyrillic, etc.).
+
+        Background noise often gets transcribed as Chinese/Japanese by ASR.
+        """
+        alpha_chars = [c for c in text if c.isalpha()]
+        if not alpha_chars:
+            return False
+        non_latin = sum(1 for c in alpha_chars if ord(c) > 0x024F)
+        return non_latin / len(alpha_chars) > 0.5
 
     @staticmethod
     def _detect_aec() -> bool:
@@ -154,10 +167,30 @@ class VoiceAssistantDaemon:
             t0 = time.time()
             user_text = self._asr.transcribe(wav_bytes)
             log.info("ASR: completed in %.0f ms", (time.time() - t0) * 1000)
-            if not user_text or not user_text.strip().strip('.').strip():
-                log.info("ASR: empty or noise result (%r), skipping.", user_text)
-                self._speak_phrase(self._RETRY_PHRASE, "ASR noise/empty")
+            is_noise = (
+                not user_text
+                or not user_text.strip().strip('.').strip()
+                or self._is_non_english(user_text)
+            )
+            if is_noise:
+                self._noise_streak += 1
+                log.info("ASR: noise result (%r), streak=%d/%d.",
+                         user_text, self._noise_streak, config.MAX_NOISE_STREAK)
+
+                if self._mic._in_conversation:
+                    # In conversation mode: silently keep listening to avoid
+                    # a feedback loop (speaking retry → noise → retry …).
+                    if self._noise_streak >= config.MAX_NOISE_STREAK:
+                        log.info("Too many noise results — returning to IDLE.")
+                        self._speak_phrase(self._GOODBYE_PHRASE, "noise streak", end_conversation=True)
+                    else:
+                        # Silently resume — no TTS, no beep.
+                        self._mic.resume_conversation()
+                else:
+                    # After initial wake word: tell user to speak louder.
+                    self._speak_phrase(self._RETRY_PHRASE, "ASR noise/empty")
                 return
+            self._noise_streak = 0
             log.info("User said: %s", user_text)
 
             # 2. LLM

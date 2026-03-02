@@ -17,6 +17,7 @@ LLM_MAX_TOKENS = int(os.getenv("LLM_MAX_TOKENS", "150"))
 LLM_SYSTEM_PROMPT = os.getenv(
     "LLM_SYSTEM_PROMPT",
     "You are a helpful voice assistant. Your responses will be spoken aloud via text-to-speech. "
+    "Always respond in English regardless of what language the user speaks. "
     "Keep answers to 1-3 short sentences. No bullet points, no lists, no markdown, no emojis.",
 )
 
@@ -85,5 +86,6 @@ PORCUPINE_SENSITIVITY     = float(os.getenv("PORCUPINE_SENSITIVITY", "0.5"))
 
 # --- Common ---
 WAKE_LISTEN_TIMEOUT_MS = int(os.getenv("WAKE_LISTEN_TIMEOUT_MS", "10000"))
-CONVERSATION_TIMEOUT_MS = int(os.getenv("CONVERSATION_TIMEOUT_MS", "300000"))  # 5 min
+CONVERSATION_TIMEOUT_MS = int(os.getenv("CONVERSATION_TIMEOUT_MS", "30000"))  # 30s
+MAX_NOISE_STREAK = int(os.getenv("MAX_NOISE_STREAK", "3"))  # go to IDLE after N consecutive noise results
 WAKE_WORD_ACK_PHRASE   = os.getenv("WAKE_WORD_ACK_PHRASE", "Yes sir")
