@@ -43,6 +43,28 @@ PIP         := $(VENV)/bin/pip
 
 all: build
 
+# ─── Build (local, on the Jetson itself) ─────────────────────────────────────
+
+build-local:
+	@echo ">>> Building locally (this may take several minutes) …"
+	$(ORIN_PYTHON) -m venv venv
+	venv/bin/pip install --quiet --upgrade pip wheel
+	venv/bin/pip install --quiet 'setuptools<65'
+	venv/bin/pip install --quiet -r requirements.txt
+	venv/bin/pip install --quiet nuitka
+	venv/bin/nuitka \
+		--onefile \
+		--follow-imports \
+		--include-package=src \
+		--include-package=dotenv \
+		--include-package=openwakeword \
+		--include-package=numpy \
+		--include-package-data=openwakeword \
+		--output-dir=dist \
+		--output-filename=$(BINARY) \
+		$(SRC)
+	@echo ">>> Binary ready: $(DIST_DIR)/$(BINARY)"
+
 # ─── Build (native on Orin over SSH) ─────────────────────────────────────────
 #
 # Nuitka does not support cross-compilation. We sync the source to the Orin,
@@ -110,7 +132,27 @@ deploy: build
 	fi
 	@echo ">>> Deploy complete. Run 'make install' to install the service."
 
-# ─── Install service on Orin ──────────────────────────────────────────────────
+# ─── Install locally (on the Jetson itself) ──────────────────────────────────
+
+install-local:
+	@echo ">>> Installing locally to $(ROBOT_DIR) …"
+	sudo mkdir -p $(ROBOT_DIR)
+	sudo cp $(DIST_DIR)/$(BINARY) $(ROBOT_DIR)/$(BINARY)
+	sudo cp $(SERVICE_SRC) $(ROBOT_DIR)/$(SERVICE_SRC)
+	sudo cp .env.example $(ROBOT_DIR)/.env.example
+	@if [ ! -f $(ROBOT_DIR)/.env ]; then \
+		sudo cp $(ROBOT_DIR)/.env.example $(ROBOT_DIR)/.env; \
+		echo ">>> Created .env from .env.example — edit it with your values."; \
+	fi
+	sudo chmod +x $(ROBOT_DIR)/$(BINARY)
+	sudo chmod 600 $(ROBOT_DIR)/.env
+	sudo cp $(ROBOT_DIR)/$(SERVICE_SRC) /etc/systemd/system/$(SERVICE_SRC)
+	sudo systemctl daemon-reload
+	sudo systemctl enable $(BINARY)
+	sudo systemctl restart $(BINARY)
+	@echo ">>> Service installed and started."
+
+# ─── Install service on Orin (via SSH) ───────────────────────────────────────
 
 install:
 	@echo ">>> Installing service on $(ROBOT_USER)@$(ROBOT_HOST) …"
@@ -195,10 +237,12 @@ clean-all: clean
 
 help:
 	@echo ""
-	@echo "  make build              Build binary natively on Jetson Orin (via SSH)"
+	@echo "  make build-local        Build binary locally on this machine"
+	@echo "  make build              Build binary on Jetson Orin (via SSH)"
 	@echo "  make run                Run from source locally (dev)"
 	@echo "  make deploy             Build on Orin + deploy binary + .env + service"
-	@echo "  make install            Install + enable systemd service on Orin"
+	@echo "  make install-local      Install binary + service locally on this machine"
+	@echo "  make install            Install + enable systemd service on Orin (via SSH)"
 	@echo "  make service-start      Start service on Orin"
 	@echo "  make service-stop       Stop service on Orin"
 	@echo "  make service-logs       Tail service logs on Orin"
