@@ -143,7 +143,7 @@ class VoiceAssistantDaemon:
         threading.Thread(target=self._speak_goodbye, daemon=True).start()
 
     _ERROR_PHRASE = "I'm sorry, my system is having a problem. Can you ask again?"
-    _GOODBYE_PHRASE = "Please call me again if you need anything."
+    _GOODBYE_PHRASE = "I'll go to sleep now. Just say hey Jarvis to wake me up again."
 
     def _pipeline(self, wav_bytes: bytes):
         self._busy.set()
