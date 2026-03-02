@@ -9,7 +9,7 @@ User=ubuntu
 Group=ubuntu
 
 WorkingDirectory=/opt/voice_assistant_app/voice_assistant_app
-ExecStart=/usr/bin/python3 /opt/voice_assistant_app/voice_assistant_app/voice_assistant.py
+ExecStart=/opt/voice_assistant_app/voice_assistant_app/venv/bin/python /opt/voice_assistant_app/voice_assistant_app/voice_assistant.py
 
 # ── Configuration ─────────────────────────────────────────────────────────────
 # All settings are loaded from .env in the working directory.
