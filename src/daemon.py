@@ -143,6 +143,7 @@ class VoiceAssistantDaemon:
         threading.Thread(target=self._speak_goodbye, daemon=True).start()
 
     _ERROR_PHRASE = "I'm sorry, my system is having a problem. Can you ask again?"
+    _RETRY_PHRASE = "I can't hear you, please speak louder."
     _GOODBYE_PHRASE = "I'll go to sleep now. Just say hey Jarvis to wake me up again."
 
     def _pipeline(self, wav_bytes: bytes):
@@ -155,7 +156,7 @@ class VoiceAssistantDaemon:
             log.info("ASR: completed in %.0f ms", (time.time() - t0) * 1000)
             if not user_text or not user_text.strip().strip('.').strip():
                 log.info("ASR: empty or noise result (%r), skipping.", user_text)
-                self._speak_phrase(self._GOODBYE_PHRASE, "ASR noise/empty")
+                self._speak_phrase(self._RETRY_PHRASE, "ASR noise/empty")
                 return
             log.info("User said: %s", user_text)
 
