@@ -115,7 +115,17 @@ deploy: build
 install:
 	@echo ">>> Installing service on $(ROBOT_USER)@$(ROBOT_HOST) …"
 	ssh -t $(ROBOT_USER)@$(ROBOT_HOST) " \
+		set -e && \
+		mkdir -p $(ROBOT_DIR) && \
+		cp $(ORIN_BUILD_DIR)/dist/$(BINARY) $(ROBOT_DIR)/$(BINARY) && \
+		cp $(ORIN_BUILD_DIR)/$(SERVICE_SRC) $(ROBOT_DIR)/$(SERVICE_SRC) && \
+		cp $(ORIN_BUILD_DIR)/.env.example $(ROBOT_DIR)/.env.example && \
+		if [ ! -f $(ROBOT_DIR)/.env ]; then \
+			cp $(ROBOT_DIR)/.env.example $(ROBOT_DIR)/.env; \
+			echo '>>> Created .env from .env.example — edit it with your values.'; \
+		fi && \
 		chmod +x $(ROBOT_DIR)/$(BINARY) && \
+		chmod 600 $(ROBOT_DIR)/.env && \
 		sudo cp $(ROBOT_DIR)/$(SERVICE_SRC) /etc/systemd/system/$(SERVICE_SRC) && \
 		sudo systemctl daemon-reload && \
 		sudo systemctl enable $(BINARY) && \
