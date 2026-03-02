@@ -23,6 +23,9 @@ EnvironmentFile=-/opt/voice_assistant_app/voice_assistant_app/.env
 
 # Allow access to audio devices
 SupplementaryGroups=audio
+# Connect to user's PulseAudio session (needed for mic/speaker access)
+Environment=PULSE_RUNTIME_PATH=/run/user/1000/pulse
+Environment=XDG_RUNTIME_DIR=/run/user/1000
 
 Restart=on-failure
 RestartSec=5
