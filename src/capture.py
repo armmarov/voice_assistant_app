@@ -66,7 +66,9 @@ class MicrophoneCapture:
         self._mute_lock = threading.Lock()
         self._state = "IDLE"
         self._resume_to_listening = False   # set by resume_listening()
+        self._resume_conversation = False   # set by resume_conversation()
         self._ww_reset_pending = False      # set by unmute(), consumed in capture loop
+        self._in_conversation = False       # True while in continuous conversation mode
 
     # ── setup ────────────────────────────────────────────────────────────────
 
@@ -213,6 +215,13 @@ class MicrophoneCapture:
             self._resume_to_listening = True
         log.info("Microphone unmuted, state → LISTENING.")
 
+    def resume_conversation(self):
+        """Unmute and return to LISTENING with conversation timeout — used after TTS reply."""
+        with self._mute_lock:
+            self._muted = False
+            self._resume_conversation = True
+        log.info("Microphone unmuted, state → LISTENING (conversation mode).")
+
     # ── lifecycle ────────────────────────────────────────────────────────────
 
     def start(self):
@@ -249,9 +258,10 @@ class MicrophoneCapture:
     # ── capture loop ─────────────────────────────────────────────────────────
 
     def _capture_loop(self):
-        silence_limit  = config.VAD_SILENCE_MS      // config.MIC_CHUNK_MS
-        min_speech     = config.VAD_MIN_SPEECH_MS   // config.MIC_CHUNK_MS
-        timeout_max    = config.WAKE_LISTEN_TIMEOUT_MS // config.MIC_CHUNK_MS
+        silence_limit    = config.VAD_SILENCE_MS      // config.MIC_CHUNK_MS
+        min_speech       = config.VAD_MIN_SPEECH_MS   // config.MIC_CHUNK_MS
+        timeout_wake     = config.WAKE_LISTEN_TIMEOUT_MS    // config.MIC_CHUNK_MS
+        timeout_convo    = config.CONVERSATION_TIMEOUT_MS   // config.MIC_CHUNK_MS
 
         ring           = deque(maxlen=self._PADDING_CHUNKS)
         voiced: List[bytes] = []
@@ -270,10 +280,13 @@ class MicrophoneCapture:
                 continue
 
             with self._mute_lock:
-                muted  = self._muted
-                resume = self._resume_to_listening
+                muted       = self._muted
+                resume      = self._resume_to_listening
+                resume_conv = self._resume_conversation
                 if resume:
                     self._resume_to_listening = False
+                if resume_conv:
+                    self._resume_conversation = False
             if muted:
                 self._state = "IDLE"
                 ring.clear()
@@ -289,13 +302,20 @@ class MicrophoneCapture:
 
             if was_muted:
                 was_muted = False
-                log.info("Capture loop resumed, state → %s", "LISTENING" if resume else "IDLE")
-            if resume:
+                if resume_conv:
+                    log.info("Capture loop resumed, state → LISTENING (conversation mode)")
+                elif resume:
+                    log.info("Capture loop resumed, state → LISTENING")
+                else:
+                    log.info("Capture loop resumed, state → IDLE")
+            if resume or resume_conv:
                 self._state = "LISTENING"
-                timeout_left  = timeout_max
+                self._in_conversation = resume_conv or self._in_conversation
+                timeout_left = timeout_convo if self._in_conversation else timeout_wake
                 voiced = []
                 silence_count = 0
-                log.debug("Resumed LISTENING after ack.")
+                log.debug("Resumed LISTENING (conversation=%s, timeout=%ds).",
+                          self._in_conversation, timeout_left * config.MIC_CHUNK_MS // 1000)
 
             if self._state == "IDLE":
                 idle_frames += 1
@@ -312,22 +332,28 @@ class MicrophoneCapture:
 
                 if detected:
                     idle_frames = 0
+                    self._in_conversation = False
                     if self._on_wake_word:
                         self._on_wake_word()
                     voiced        = list(ring)
                     silence_count = 0
-                    timeout_left  = timeout_max
+                    timeout_left  = timeout_wake
                     self._state   = "LISTENING"
                     ring.clear()
 
             elif self._state == "LISTENING":
                 timeout_left -= 1
                 if timeout_left <= 0:
-                    log.info("Listen timeout — returning to IDLE.")
+                    if self._in_conversation:
+                        log.info("Conversation timeout (%ds) — returning to IDLE.",
+                                 config.CONVERSATION_TIMEOUT_MS // 1000)
+                    else:
+                        log.info("Listen timeout — returning to IDLE.")
                     voiced = []
                     ring.clear()
                     silence_count = 0
                     self._state = "IDLE"
+                    self._in_conversation = False
                     if self._on_listen_timeout:
                         self._on_listen_timeout()
                     continue
@@ -338,7 +364,7 @@ class MicrophoneCapture:
                     if silence_count > 0 or len(voiced) == 1:
                         log.info("VAD: speech detected (voiced frames: %d)", len(voiced))
                     silence_count = 0
-                    timeout_left  = timeout_max
+                    timeout_left  = timeout_convo if self._in_conversation else timeout_wake
                 else:
                     silence_count += 1
                     if silence_count >= silence_limit:
@@ -352,10 +378,13 @@ class MicrophoneCapture:
                             voiced = []
                             ring.clear()
                             silence_count = 0
-                            self._state = "IDLE"
+                            # In conversation mode, stay LISTENING for next question.
+                            # Otherwise return to IDLE (wake word required).
+                            if not self._in_conversation:
+                                self._state = "IDLE"
                         else:
                             # Too short — stay in LISTENING so user can keep talking.
                             log.info("VAD: utterance too short (%d ms < %d ms), still listening …", duration_ms, config.VAD_MIN_SPEECH_MS)
                             voiced = []
                             silence_count = 0
-                            timeout_left = timeout_max
+                            timeout_left = timeout_convo if self._in_conversation else timeout_wake

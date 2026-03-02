@@ -187,19 +187,23 @@ class VoiceAssistantDaemon:
             try:
                 self._player.play_stream(self._tts.synthesize_stream(tts_text))
             finally:
-                # Low beep — signal "reply done, say hey jarvis again".
+                # Low beep — signal "reply done, keep talking".
                 self._player.play(self._generate_beep_wav(freq=660, duration_ms=150))
-                log.info("TTS playback finished, resuming mic.")
+                log.info("TTS playback finished, resuming conversation.")
                 if config.MIC_MUTE_DURING_PLAYBACK:
-                    self._mic.unmute()
+                    self._mic.resume_conversation()
         except Exception as exc:
             log.error("Pipeline error: %s", exc)
             self._speak_error(str(exc))
         finally:
             self._busy.clear()
 
-    def _speak_phrase(self, phrase: str, reason: str):
-        """Speak a phrase with mic muted, then unmute and beep."""
+    def _speak_phrase(self, phrase: str, reason: str, end_conversation: bool = False):
+        """Speak a phrase with mic muted, then resume.
+
+        If end_conversation is True, returns to IDLE (wake word required).
+        Otherwise stays in conversation mode.
+        """
         log.info("Speaking: \"%s\" (reason: %s)", phrase, reason)
         try:
             if config.MIC_MUTE_DURING_PLAYBACK:
@@ -216,7 +220,10 @@ class VoiceAssistantDaemon:
                 pass
         finally:
             if config.MIC_MUTE_DURING_PLAYBACK:
-                self._mic.unmute()
+                if end_conversation:
+                    self._mic.unmute()
+                else:
+                    self._mic.resume_conversation()
 
     def _speak_error(self, reason: str):
         self._speak_phrase(self._ERROR_PHRASE, reason)
@@ -224,7 +231,7 @@ class VoiceAssistantDaemon:
     def _speak_goodbye(self):
         self._busy.set()
         try:
-            self._speak_phrase(self._GOODBYE_PHRASE, "listen timeout")
+            self._speak_phrase(self._GOODBYE_PHRASE, "listen timeout", end_conversation=True)
         finally:
             self._busy.clear()
 
