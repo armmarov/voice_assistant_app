@@ -167,9 +167,12 @@ class VoiceAssistantDaemon:
             t0 = time.time()
             user_text = self._asr.transcribe(wav_bytes)
             log.info("ASR: completed in %.0f ms", (time.time() - t0) * 1000)
+            # Strip punctuation (Latin + CJK) to count meaningful words.
+            cleaned = re.sub(r'[.,!?;:\'\"。，！？；：…\-/()（）\[\]【】]', '', user_text or '').strip()
+            word_count = len(cleaned.split()) if cleaned else 0
             is_noise = (
                 not user_text
-                or not user_text.strip().strip('.').strip()
+                or word_count < 2                  # single word / punctuation-only = noise
                 or (config.LLM_LANGUAGE.lower() == "english" and self._is_non_english(user_text))
             )
             if is_noise:
