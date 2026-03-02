@@ -47,6 +47,7 @@ MIC_CHUNK_SAMPLES = int(MIC_SAMPLE_RATE * MIC_CHUNK_MS / 1000)  # = 480
 VAD_AGGRESSIVENESS = int(os.getenv("VAD_AGGRESSIVENESS", "3"))    # 0-3
 VAD_SILENCE_MS     = int(os.getenv("VAD_SILENCE_MS",     "1200")) # stop after N ms silence
 VAD_MIN_SPEECH_MS  = int(os.getenv("VAD_MIN_SPEECH_MS",  "2000")) # ignore < N ms utterances
+VAD_MAX_SPEECH_MS  = int(os.getenv("VAD_MAX_SPEECH_MS",  "15000")) # force-complete after N ms
 
 # ─── Audio Playback ───────────────────────────────────────────────────────────
 SPK_SAMPLE_RATE = 44100   # TTS output is 44100 Hz mono 16-bit

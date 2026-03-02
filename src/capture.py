@@ -260,6 +260,7 @@ class MicrophoneCapture:
     def _capture_loop(self):
         silence_limit    = config.VAD_SILENCE_MS      // config.MIC_CHUNK_MS
         min_speech       = config.VAD_MIN_SPEECH_MS   // config.MIC_CHUNK_MS
+        max_speech       = config.VAD_MAX_SPEECH_MS   // config.MIC_CHUNK_MS
         timeout_wake     = config.WAKE_LISTEN_TIMEOUT_MS    // config.MIC_CHUNK_MS
         timeout_convo    = config.CONVERSATION_TIMEOUT_MS   // config.MIC_CHUNK_MS
 
@@ -359,6 +360,22 @@ class MicrophoneCapture:
                     continue
 
                 voiced.append(frame)
+
+                # Safety: force-complete if utterance exceeds max duration.
+                if len(voiced) >= max_speech:
+                    duration_ms = len(voiced) * config.MIC_CHUNK_MS
+                    log.info("VAD: max utterance duration reached (%d ms), sending to ASR …", duration_ms)
+                    wav = pcm_frames_to_wav(
+                        voiced, config.MIC_SAMPLE_RATE, config.MIC_CHANNELS
+                    )
+                    self._on_utterance(wav)
+                    voiced = []
+                    ring.clear()
+                    silence_count = 0
+                    if not self._in_conversation:
+                        self._state = "IDLE"
+                    continue
+
                 is_speech = self._vad.is_speech(frame, config.MIC_SAMPLE_RATE)
                 if is_speech:
                     if silence_count > 0 or len(voiced) == 1:
