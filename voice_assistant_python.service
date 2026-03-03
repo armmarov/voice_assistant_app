@@ -1,6 +1,6 @@
 [Unit]
 Description=Voice Assistant Daemon — Python (Mic → ASR → LLM → TTS → Speaker)
-After=network.target sound.target
+After=network.target sound.target pulseaudio.service
 Wants=network-online.target
 
 [Service]
@@ -9,6 +9,8 @@ User=ubuntu
 Group=ubuntu
 
 WorkingDirectory=/opt/voice_assistant_app/voice_assistant_app
+# Wait for PulseAudio to be ready after boot
+ExecStartPre=/bin/sleep 10
 ExecStart=/opt/voice_assistant_app/voice_assistant_app/venv/bin/python /opt/voice_assistant_app/voice_assistant_app/voice_assistant.py
 
 # ── Configuration ─────────────────────────────────────────────────────────────
