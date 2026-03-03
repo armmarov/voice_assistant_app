@@ -287,6 +287,7 @@ class VoiceAssistantDaemon:
                 self._player.play(audio)
                 self._player.play(self._generate_beep_wav(freq=660, duration_ms=150))
                 log.info("Greeting played.")
+                time.sleep(1)
         except Exception as exc:
             log.warning("Could not play greeting: %s", exc)
 
