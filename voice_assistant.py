@@ -31,7 +31,6 @@ from dotenv import load_dotenv
 load_dotenv(dotenv_path=Path.cwd() / ".env")
 
 from src import config
-from src.daemon import VoiceAssistantDaemon
 
 
 def _setup_logging() -> None:
@@ -46,4 +45,9 @@ def _setup_logging() -> None:
 
 if __name__ == "__main__":
     _setup_logging()
-    VoiceAssistantDaemon().run()
+    if config.PIPELINE_MODE == "livekit":
+        from src.livekit_daemon import LiveKitVoiceAssistantDaemon
+        LiveKitVoiceAssistantDaemon().run()
+    else:
+        from src.daemon import VoiceAssistantDaemon
+        VoiceAssistantDaemon().run()

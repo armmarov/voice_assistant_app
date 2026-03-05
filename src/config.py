@@ -1,5 +1,18 @@
 import os
 
+# ─── Pipeline Mode ───────────────────────────────────────────────────────────
+# "local" — full local pipeline: Mic → Wake Word → VAD → ASR → LLM → TTS → Speaker
+# "livekit" — after wake word, connect to a LiveKit room; server-side agent handles ASR/LLM/TTS
+PIPELINE_MODE = os.getenv("PIPELINE_MODE", "local")
+
+# ─── LiveKit (only used when PIPELINE_MODE=livekit) ──────────────────────────
+LIVEKIT_URL              = os.getenv("LIVEKIT_URL", "ws://3.114.138.123:8003")
+LIVEKIT_API_KEY          = os.getenv("LIVEKIT_API_KEY", "devkey")
+LIVEKIT_API_SECRET       = os.getenv("LIVEKIT_API_SECRET", "secret")
+LIVEKIT_ROOM_NAME        = os.getenv("LIVEKIT_ROOM_NAME", "voice-assistant")
+LIVEKIT_PARTICIPANT_NAME = os.getenv("LIVEKIT_PARTICIPANT_NAME", "robot")
+LIVEKIT_INACTIVITY_TIMEOUT_S = int(os.getenv("LIVEKIT_INACTIVITY_TIMEOUT_S", "60"))
+
 # ─── ASR Service ──────────────────────────────────────────────────────────────
 ASR_BASE_URL = os.getenv("ASR_BASE_URL", "http://3.114.138.123:8005")
 ASR_ENDPOINT = f"{ASR_BASE_URL}/asr"

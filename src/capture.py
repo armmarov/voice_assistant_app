@@ -69,6 +69,7 @@ class MicrophoneCapture:
         self._resume_conversation = False   # set by resume_conversation()
         self._ww_reset_pending = False      # set by unmute(), consumed in capture loop
         self._in_conversation = False       # True while in continuous conversation mode
+        self._on_raw_frame = None           # callback for PASSTHROUGH mode
 
     # ── setup ────────────────────────────────────────────────────────────────
 
@@ -222,6 +223,25 @@ class MicrophoneCapture:
             self._resume_conversation = True
         log.info("Microphone unmuted, state → LISTENING (conversation mode).")
 
+    def start_passthrough(self, on_raw_frame: Callable[[bytes], None]):
+        """Switch to PASSTHROUGH — every mic frame is forwarded to *on_raw_frame*.
+
+        Used by LiveKit mode: wake word detection stops, raw PCM frames are
+        published to the LiveKit room instead of going through VAD/ASR.
+        """
+        with self._mute_lock:
+            self._on_raw_frame = on_raw_frame
+            self._state = "PASSTHROUGH"
+        log.info("Capture: switched to PASSTHROUGH mode.")
+
+    def stop_passthrough(self):
+        """Leave PASSTHROUGH and return to IDLE (wake word detection resumes)."""
+        with self._mute_lock:
+            self._on_raw_frame = None
+            self._state = "IDLE"
+            self._ww_reset_pending = True
+        log.info("Capture: left PASSTHROUGH, returning to IDLE.")
+
     # ── lifecycle ────────────────────────────────────────────────────────────
 
     def start(self):
@@ -341,6 +361,16 @@ class MicrophoneCapture:
                     timeout_left  = timeout_wake
                     self._state   = "LISTENING"
                     ring.clear()
+
+            elif self._state == "PASSTHROUGH":
+                with self._mute_lock:
+                    cb = self._on_raw_frame
+                if cb:
+                    try:
+                        cb(frame)
+                    except Exception as exc:
+                        log.warning("PASSTHROUGH callback error: %s", exc)
+                continue
 
             elif self._state == "LISTENING":
                 timeout_left -= 1
