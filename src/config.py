@@ -9,7 +9,9 @@ TTS_BASE_URL = os.getenv("TTS_BASE_URL", "http://3.114.138.123:8006")
 TTS_ENDPOINT = f"{TTS_BASE_URL}/generate"
 TTS_VOICE    = os.getenv("TTS_VOICE", "default")   # liudao, filrty, zhiyu, default
 
-# ─── LLM Service (OpenAI-compatible) ──────────────────────────────────────────
+# ─── LLM Service ─────────────────────────────────────────────────────────────
+# Engine: "openai" (OpenAI-compatible) or "dify" (Dify chat API)
+LLM_ENGINE    = os.getenv("LLM_ENGINE",   "openai")
 LLM_BASE_URL  = os.getenv("LLM_BASE_URL", "http://localhost:11434/v1")
 LLM_API_KEY   = os.getenv("LLM_API_KEY",  "nokey")
 LLM_MODEL     = os.getenv("LLM_MODEL",    "llama3")

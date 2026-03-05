@@ -11,7 +11,7 @@ import wave
 
 from . import config
 from .asr import ASRClient
-from .llm import LLMClient
+from .llm import LLMClient, DifyLLMClient
 from .tts import TTSClient
 from .audio import AudioPlayer
 from .capture import MicrophoneCapture
@@ -27,7 +27,7 @@ class VoiceAssistantDaemon:
 
     def __init__(self):
         self._asr    = ASRClient()
-        self._llm    = LLMClient()
+        self._llm    = DifyLLMClient() if config.LLM_ENGINE == "dify" else LLMClient()
         self._tts    = TTSClient()
         self._player = AudioPlayer()
         self._mic    = MicrophoneCapture(

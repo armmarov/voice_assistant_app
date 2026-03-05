@@ -60,3 +60,52 @@ class LLMClient:
         with self._lock:
             self._history.clear()
         log.info("Conversation history cleared.")
+
+
+class DifyLLMClient:
+    """
+    Dify chat API client.
+    Server manages conversation history via conversation_id.
+    """
+
+    def __init__(self):
+        self._conversation_id = ""
+        self._lock = threading.Lock()
+
+    def chat(self, user_text: str) -> Optional[str]:
+        url = f"{config.LLM_BASE_URL}/chat-messages"
+        headers = {
+            "Authorization": f"Bearer {config.LLM_API_KEY}",
+            "Content-Type": "application/json",
+        }
+        payload = {
+            "inputs": {},
+            "query": user_text,
+            "response_mode": "blocking",
+            "conversation_id": self._conversation_id,
+            "user": "robot",
+        }
+
+        try:
+            resp = requests.post(
+                url, json=payload, headers=headers, timeout=config.LLM_TIMEOUT,
+                verify=False,
+            )
+            resp.raise_for_status()
+            data = resp.json()
+            reply = data["answer"].strip()
+            with self._lock:
+                self._conversation_id = data.get("conversation_id", "")
+            log.debug("Dify reply: %r", reply)
+            return reply
+        except requests.RequestException as exc:
+            log.error("Dify request failed: %s", exc)
+            return None
+        except (KeyError, IndexError) as exc:
+            log.error("Dify unexpected response: %s", exc)
+            return None
+
+    def reset(self):
+        with self._lock:
+            self._conversation_id = ""
+        log.info("Dify conversation reset.")
