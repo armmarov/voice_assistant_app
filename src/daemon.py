@@ -66,6 +66,13 @@ class VoiceAssistantDaemon:
         return text.strip()
 
     @staticmethod
+    def _normalize_asr(text: str) -> str:
+        """Fix common ASR misrecognitions before sending to LLM."""
+        # Zetrix variants: Ztrix, Zetrx, Z Trx, ZTRX, z-trix, etc.
+        text = re.sub(r'\bZ[\s\-]*T[\s\-]*R[\s\-]*[IX]+\b', 'Zetrix', text, flags=re.IGNORECASE)
+        return text
+
+    @staticmethod
     def _is_non_english(text: str) -> bool:
         """Return True if >50% of alphabetic characters are non-Latin (CJK, Cyrillic, etc.).
 
@@ -194,6 +201,7 @@ class VoiceAssistantDaemon:
                     self._speak_phrase(self._RETRY_PHRASE, "ASR noise/empty")
                 return
             self._noise_streak = 0
+            user_text = self._normalize_asr(user_text)
             log.info("User said: %s", user_text)
 
             # 2. LLM
