@@ -168,6 +168,10 @@ class VoiceAssistantDaemon:
 
     def _pipeline(self, wav_bytes: bytes):
         self._busy.set()
+        # Mute mic during ASR+LLM processing so the user can't trigger
+        # another utterance that would be silently dropped (busy flag).
+        if config.MIC_MUTE_DURING_PLAYBACK:
+            self._mic.mute()
         try:
             # 1. ASR
             log.info("ASR: transcribing (%d bytes) …", len(wav_bytes))
@@ -194,7 +198,12 @@ class VoiceAssistantDaemon:
                         log.info("Too many noise results — returning to IDLE.")
                         self._speak_phrase(self._GOODBYE_PHRASE, "noise streak", end_conversation=True)
                     else:
-                        # Silently resume — no TTS, no beep.
+                        # Play a soft beep so the user knows to try again.
+                        # (Not TTS — a short beep won't cause an ASR feedback loop.)
+                        try:
+                            self._player.play(self._generate_beep_wav(freq=440, duration_ms=300, volume=0.3))
+                        except Exception:
+                            pass
                         self._mic.resume_conversation()
                 else:
                     # After initial wake word: tell user to speak louder.

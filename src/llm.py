@@ -89,7 +89,7 @@ class DifyLLMClient:
         try:
             resp = requests.post(
                 url, json=payload, headers=headers, timeout=config.LLM_TIMEOUT,
-                verify=False,
+                verify=True,
             )
             resp.raise_for_status()
             data = resp.json()
