@@ -401,7 +401,8 @@ class MicrophoneCapture:
                                 self._state = "IDLE"
                         else:
                             # Too short — stay in LISTENING so user can keep talking.
+                            # Do NOT reset timeout_left: robot noise bursts would
+                            # otherwise keep resetting the timer and prevent IDLE.
                             log.info("VAD: utterance too short (%d ms < %d ms), still listening …", duration_ms, config.VAD_MIN_SPEECH_MS)
                             voiced = []
                             silence_count = 0
-                            timeout_left = timeout_convo if self._in_conversation else timeout_wake
