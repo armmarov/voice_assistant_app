@@ -77,7 +77,9 @@ class MicrophoneCapture:
         from openwakeword.model import Model
 
         if config.WAKE_WORD_MODEL_PATH:
-            oww = Model(wakeword_models=[config.WAKE_WORD_MODEL_PATH])
+            # Auto-detect inference framework from file extension.
+            framework = "onnx" if config.WAKE_WORD_MODEL_PATH.endswith(".onnx") else "tflite"
+            oww = Model(wakeword_models=[config.WAKE_WORD_MODEL_PATH], inference_framework=framework)
             log.info("OpenWakeWord engine loaded from %s", config.WAKE_WORD_MODEL_PATH)
         else:
             model_file = config.WAKE_WORD_MODEL + "_v0.1.tflite"
