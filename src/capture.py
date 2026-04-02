@@ -137,10 +137,10 @@ class MicrophoneCapture:
                 self._ww_reset_pending = False
                 do_reset = True
         if do_reset:
-            # Full re-init to guarantee clean state after mute.
-            # Done outside the lock since init may be slow.
-            self._oww = self._init_oww()
-            log.info("OpenWakeWord model re-initialized.")
+            # Lightweight reset — clears internal buffers without reloading
+            # the model from disk (which is slow and causes audio gaps).
+            self._oww.reset()
+            log.info("OpenWakeWord model reset.")
 
         prediction = self._oww.predict(pcm)
         max_score = max(prediction.values()) if prediction else 0
