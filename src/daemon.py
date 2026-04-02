@@ -235,18 +235,16 @@ class VoiceAssistantDaemon:
             tts_text = self._clean_for_tts(reply)
             log.debug("TTS text: %s", tts_text)
 
-            # 3+4. TTS → play.
+            # 3+4. TTS stream → play simultaneously.
             log.info(
-                "TTS: synthesizing + playing … (mute=%s aec=%s)",
+                "TTS: streaming + playing … (mute=%s aec=%s)",
                 config.MIC_MUTE_DURING_PLAYBACK,
                 self._aec_active,
             )
             if config.MIC_MUTE_DURING_PLAYBACK:
                 self._mic.mute()
             try:
-                audio = self._tts.synthesize(tts_text)
-                if audio:
-                    self._player.play(audio)
+                self._player.play_stream(self._tts.synthesize_stream(tts_text))
             finally:
                 # Low beep — signal "reply done, keep talking".
                 self._player.play(self._generate_beep_wav(freq=660, duration_ms=150))
