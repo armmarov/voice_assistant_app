@@ -307,7 +307,7 @@ class MicrophoneCapture:
                 was_muted = False
                 # Discard frames for a short cooldown after unmuting so
                 # residual TTS echo doesn't get picked up as speech.
-                cooldown = 500 // config.MIC_CHUNK_MS  # ~500 ms
+                cooldown = 1500 // config.MIC_CHUNK_MS  # ~1500 ms
                 for _ in range(cooldown):
                     try:
                         self._stream.read(self._VAD_FRAME_SAMPLES, exception_on_overflow=False)
