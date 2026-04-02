@@ -92,3 +92,4 @@ WAKE_LISTEN_TIMEOUT_MS = int(os.getenv("WAKE_LISTEN_TIMEOUT_MS", "10000"))
 CONVERSATION_TIMEOUT_MS = int(os.getenv("CONVERSATION_TIMEOUT_MS", "30000"))  # 30s
 MAX_NOISE_STREAK = int(os.getenv("MAX_NOISE_STREAK", "3"))  # go to IDLE after N consecutive noise results
 WAKE_WORD_ACK_PHRASE   = os.getenv("WAKE_WORD_ACK_PHRASE", "Yes sir")
+ROBOT_NAME             = os.getenv("ROBOT_NAME", "Zeus")

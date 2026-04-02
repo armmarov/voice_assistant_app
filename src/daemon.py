@@ -164,7 +164,6 @@ class VoiceAssistantDaemon:
 
     _ERROR_PHRASE = "I'm sorry, my system is having a problem. Can you ask again?"
     _RETRY_PHRASE = "I can't hear you, please speak louder."
-    _GOODBYE_PHRASE = "I'll go to sleep now. Just say hey Jarvis to wake me up again."
 
     def _pipeline(self, wav_bytes: bytes):
         self._busy.set()
@@ -291,7 +290,13 @@ class VoiceAssistantDaemon:
 
     # ── lifecycle ─────────────────────────────────────────────────────────────
 
-    _GREETING = "Hi, I am Jarvis your robot assistant. Please ask me if you have any question."
+    @property
+    def _GOODBYE_PHRASE(self):
+        return f"I'll go to sleep now. Just say hey {config.ROBOT_NAME} to wake me up again."
+
+    @property
+    def _GREETING(self):
+        return f"Hi, I am {config.ROBOT_NAME} your robot assistant. Please ask me if you have any question."
 
     def run(self):
         log.info("Voice Assistant starting …")
