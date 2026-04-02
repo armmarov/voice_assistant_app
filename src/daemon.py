@@ -58,8 +58,10 @@ class VoiceAssistantDaemon:
             r'[\U0001F300-\U0001F9FF\U00002600-\U000027BF\U0000FE00-\U0000FE0F'
             r'\U0000200D\U00002702-\U000027B0\U0001FA00-\U0001FA6F'
             r'\U0001FA70-\U0001FAFF]+', '', text)
-        # Remove remaining special symbols but keep basic punctuation
-        text = re.sub(r'[^\w\s.,!?;:\'\"-/()]+', '', text)
+        # Remove remaining special symbols but keep basic punctuation.
+        # re.ASCII ensures \w only matches [a-zA-Z0-9_], stripping CJK and
+        # other non-Latin characters that TTS would vocalize as gibberish.
+        text = re.sub(r'[^\w\s.,!?;:\'\"-/()]+', '', text, flags=re.ASCII)
         # Collapse multiple blank lines / whitespace
         text = re.sub(r'\n{3,}', '\n\n', text)
         text = re.sub(r'[ \t]+', ' ', text)
@@ -212,6 +214,12 @@ class VoiceAssistantDaemon:
             user_text = self._normalize_asr(user_text)
             log.info("User said: %s", user_text)
 
+            # Check if user wants to end the conversation.
+            end_conversation = bool(re.search(
+                r'\b(sleep|goodbye|good\s*bye|stop|shut\s*down|standby|go\s*to\s*sleep)\b',
+                user_text, re.IGNORECASE,
+            ))
+
             # 2. LLM
             log.info("LLM: generating reply …")
             t0 = time.time()
@@ -242,9 +250,15 @@ class VoiceAssistantDaemon:
             finally:
                 # Low beep — signal "reply done, keep talking".
                 self._player.play(self._generate_beep_wav(freq=660, duration_ms=150))
-                log.info("TTS playback finished, resuming conversation.")
-                if config.MIC_MUTE_DURING_PLAYBACK:
-                    self._mic.resume_conversation()
+                if end_conversation:
+                    log.info("TTS playback finished, user requested sleep — returning to IDLE.")
+                    self._llm.reset()
+                    if config.MIC_MUTE_DURING_PLAYBACK:
+                        self._mic.unmute()
+                else:
+                    log.info("TTS playback finished, resuming conversation.")
+                    if config.MIC_MUTE_DURING_PLAYBACK:
+                        self._mic.resume_conversation()
         except Exception as exc:
             log.error("Pipeline error: %s", exc)
             self._speak_error(str(exc))
